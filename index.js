@@ -9,12 +9,14 @@ const PORT = process.env.PORT || 3001;
 // CORS configuration
 app.use(cors({
   origin: [
-    'http://localhost:3000',
-    'https://viking-eta.vercel.app'  // Your Vercel frontend URL
+    'https://viking-eta.vercel.app',  // Your Vercel frontend URL
+    'https://familybalance.pl',       // Your custom domain
+    'https://www.familybalance.pl'    // Optional: Add www subdomain if used
   ],
   methods: ['POST', 'OPTIONS'],
   credentials: true
 }));
+
 
 app.use(express.json());
 
