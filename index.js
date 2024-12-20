@@ -2,29 +2,82 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { GoogleSpreadsheet } = require('google-spreadsheet');
+const session = require('express-session');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// CORS configuration
+// Session middleware setup
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'your-secret-key',
+  resave: false,
+  saveUninitialized: false,
+  cookie: { 
+    secure: process.env.NODE_ENV === 'production',
+    httpOnly: true,
+    maxAge: 24 * 60 * 60 * 1000 // 24 hours
+  }
+}));
+
+// Updated CORS configuration
 app.use(cors({
   origin: [
-    'https://viking-eta.vercel.app',  // Your Vercel frontend URL
-    'https://familybalance.pl',       // Your custom domain
-    'https://www.familybalance.pl'    // Optional: Add www subdomain if used
+    'https://viking-eta.vercel.app',
+    'https://familybalance.pl',
+    'https://www.familybalance.pl'
   ],
-  methods: ['POST', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   credentials: true
 }));
 
-
 app.use(express.json());
+
+// Auth middleware
+const authMiddleware = (req, res, next) => {
+  if (!req.session.userId) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  next();
+};
 
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
 });
 
+// Auth endpoints
+app.post('/api/login', async (req, res) => {
+  const { email, password } = req.body;
+  try {
+    // Here integrate with your Appwrite auth
+    // For now simulating successful login
+    req.session.userId = email; // Store user identifier in session
+    res.json({ success: true });
+  } catch (error) {
+    res.status(401).json({ error: 'Authentication failed' });
+  }
+});
+
+app.post('/api/logout', (req, res) => {
+  req.session.destroy();
+  res.clearCookie('connect.sid');
+  res.json({ success: true });
+});
+
+// Cart endpoints
+app.get('/api/cart', authMiddleware, (req, res) => {
+  // Get cart from session
+  const cart = req.session.cart || [];
+  res.json(cart);
+});
+
+app.post('/api/cart', authMiddleware, (req, res) => {
+  // Update cart in session
+  req.session.cart = req.body;
+  res.json({ success: true });
+});
+
+// Google Sheets endpoint
 async function handleSheetRequest(req, res) {
   try {
     console.log('Request received:', req.body);
@@ -34,8 +87,6 @@ async function handleSheetRequest(req, res) {
     }
 
     const doc = new GoogleSpreadsheet(process.env.SPREADSHEET_ID);
-    
-    // Format private key properly
     const formattedKey = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n') || '';
 
     await doc.useServiceAccountAuth({
@@ -55,13 +106,14 @@ async function handleSheetRequest(req, res) {
   }
 }
 
-app.post('/api', handleSheetRequest);
+app.post('/api/sheet', authMiddleware, handleSheetRequest);
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`Environment check:`, {
     hasEmail: !!process.env.GOOGLE_CLIENT_EMAIL,
-    hasKey: !!process.env.GOOGLE_PRIVATE_KEY,
-    hasSpreadsheetId: !!process.env.SPREADSHEET_ID
+    hasKey: !!process.GOOGLE_PRIVATE_KEY,
+    hasSpreadsheetId: !!process.env.SPREADSHEET_ID,
+    hasSessionSecret: !!process.env.SESSION_SECRET
   });
 });
