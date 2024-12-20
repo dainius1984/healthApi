@@ -45,13 +45,21 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
 });
 
+// Session check endpoint
+app.get('/api/check-session', (req, res) => {
+  if (req.session.userId) {
+    res.json({ authenticated: true });
+  } else {
+    res.status(401).json({ authenticated: false });
+  }
+});
+
 // Auth endpoints
 app.post('/api/login', async (req, res) => {
-  const { email, password } = req.body;
+  const { email } = req.body;
   try {
-    // Here integrate with your Appwrite auth
-    // For now simulating successful login
-    req.session.userId = email; // Store user identifier in session
+    req.session.userId = email;
+    req.session.cart = req.session.cart || [];
     res.json({ success: true });
   } catch (error) {
     res.status(401).json({ error: 'Authentication failed' });
@@ -66,13 +74,11 @@ app.post('/api/logout', (req, res) => {
 
 // Cart endpoints
 app.get('/api/cart', authMiddleware, (req, res) => {
-  // Get cart from session
   const cart = req.session.cart || [];
   res.json(cart);
 });
 
 app.post('/api/cart', authMiddleware, (req, res) => {
-  // Update cart in session
   req.session.cart = req.body;
   res.json({ success: true });
 });
@@ -112,7 +118,7 @@ app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`Environment check:`, {
     hasEmail: !!process.env.GOOGLE_CLIENT_EMAIL,
-    hasKey: !!process.GOOGLE_PRIVATE_KEY,
+    hasKey: !!process.env.GOOGLE_PRIVATE_KEY,
     hasSpreadsheetId: !!process.env.SPREADSHEET_ID,
     hasSessionSecret: !!process.env.SESSION_SECRET
   });
