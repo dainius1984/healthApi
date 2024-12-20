@@ -22,12 +22,15 @@ app.use(session({
 // Updated CORS configuration
 app.use(cors({
   origin: [
-    'https://viking-eta.vercel.app',
-    'https://familybalance.pl',
-    'https://www.familybalance.pl'
+      'https://viking-eta.vercel.app',
+      'https://familybalance.pl',
+      'https://www.familybalance.pl',
+      // Add your development URL if needed
+      'http://localhost:3000'
   ],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  credentials: true
+  credentials: true,
+  allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
 app.use(express.json());
@@ -56,13 +59,21 @@ app.get('/api/check-session', (req, res) => {
 
 // Auth endpoints
 app.post('/api/login', async (req, res) => {
-  const { email } = req.body;
+  const { email, appwriteSession } = req.body;
   try {
-    req.session.userId = email;
-    req.session.cart = req.session.cart || [];
-    res.json({ success: true });
+      // Store both email and Appwrite session ID
+      req.session.userId = email;
+      req.session.appwriteSession = appwriteSession;
+      req.session.cart = req.session.cart || [];
+      
+      // Set proper CORS headers
+      res.header('Access-Control-Allow-Credentials', 'true');
+      res.header('Access-Control-Allow-Origin', req.headers.origin);
+      
+      res.json({ success: true });
   } catch (error) {
-    res.status(401).json({ error: 'Authentication failed' });
+      console.error('Login error:', error);
+      res.status(401).json({ error: 'Authentication failed' });
   }
 });
 
