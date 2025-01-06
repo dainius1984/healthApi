@@ -3,6 +3,8 @@ const express = require('express');
 const cors = require('cors');
 const { GoogleSpreadsheet } = require('google-spreadsheet');
 const session = require('express-session');
+const axios = require('axios');
+const payuService = require('./services/payu.service');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -19,17 +21,17 @@ app.use(session({
   }
 }));
 
-// Updated CORS configuration
+// Updated CORS configuration for production with Vercel and PayU
 app.use(cors({
   origin: [
-    'https://viking-eta.vercel.app',
-    'https://familybalance.pl',
-    'https://www.familybalance.pl',
-    'http://localhost:3000'
+    'https://viking-eta.vercel.app',    // Vercel production
+    'https://familybalance.pl',         // Custom domain
+    'https://www.familybalance.pl',     // Custom domain with www
+    'https://sandbox.payu.com'          // PayU sandbox
   ],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   credentials: true,
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'OpenPayU-Signature'],
 }));
 
 app.use(express.json());
@@ -134,18 +136,105 @@ async function handleSheetRequest(req, res) {
 
     await doc.loadInfo();
     const sheet = doc.sheetsByIndex[0];
-    await sheet.addRow(req.body);
-
+    
+    // Add payment status column
+    const rowData = {
+      ...req.body,
+      'Status płatności': 'PENDING', // Initial payment status
+      'PayU OrderId': '', // Will be updated after PayU order creation
+    };
+    
+    const addedRow = await sheet.addRow(rowData);
     console.log('Successfully added row to sheet');
-    return res.status(200).json({ success: true });
+    
+    return addedRow;
   } catch (error) {
     console.error('Error:', error);
-    return res.status(500).json({ 
-      error: 'Failed to process order',
-      details: error.message 
-    });
+    throw error; // Re-throw to be handled by calling function
   }
 }
+
+// Payment endpoints
+app.post('/api/create-payment', async (req, res) => {
+  try {
+    console.log('Payment request received:', req.body);
+
+    // First save order to Google Sheet
+    const sheetRow = await handleSheetRequest(req, res);
+
+    // Get PayU authorization token
+    const accessToken = await payuService.getAuthToken();
+
+    // Prepare order data for PayU
+    const orderData = payuService.createOrderData(
+      {
+        orderNumber: req.body['Numer zamowienia'],
+        cart: JSON.parse(req.body.Produkty),
+        total: parseFloat(req.body['Suma'])
+      },
+      req.body,
+      req.ip
+    );
+
+    // Create PayU order
+    const payuResponse = await payuService.createOrder(orderData, accessToken);
+
+    // Update sheet row with PayU order ID
+    await sheetRow.update({
+      'PayU OrderId': payuResponse.orderId
+    });
+
+    res.json({
+      success: true,
+      redirectUrl: payuResponse.redirectUrl,
+      orderId: payuResponse.orderId
+    });
+
+  } catch (error) {
+    console.error('Payment processing error:', error);
+    res.status(500).json({
+      error: 'Payment creation failed',
+      details: error.message
+    });
+  }
+});
+
+// PayU webhook endpoint
+app.post('/api/payu-webhook', async (req, res) => {
+  try {
+    console.log('PayU webhook received:', req.body);
+    
+    const { order } = req.body;
+    if (!order || !order.orderId || !order.status) {
+      throw new Error('Invalid webhook payload');
+    }
+
+    // Update order status in Google Sheet
+    const doc = new GoogleSpreadsheet(process.env.SPREADSHEET_ID);
+    const formattedKey = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n') || '';
+
+    await doc.useServiceAccountAuth({
+      client_email: process.env.GOOGLE_CLIENT_EMAIL,
+      private_key: formattedKey
+    });
+
+    await doc.loadInfo();
+    const sheet = doc.sheetsByIndex[0];
+    const rows = await sheet.getRows();
+    
+    const orderRow = rows.find(row => row['PayU OrderId'] === order.orderId);
+    if (orderRow) {
+      orderRow['Status płatności'] = order.status;
+      await orderRow.save();
+      console.log(`Updated order ${order.orderId} status to ${order.status}`);
+    }
+
+    res.status(200).json({ status: 'OK' });
+  } catch (error) {
+    console.error('PayU webhook error:', error);
+    res.status(500).json({ error: 'Webhook processing failed' });
+  }
+});
 
 // New endpoint specifically for guest orders with rate limiting
 app.post('/api/guest-order', async (req, res) => {
@@ -193,6 +282,7 @@ app.listen(PORT, () => {
     hasKey: !!process.env.GOOGLE_PRIVATE_KEY,
     hasSpreadsheetId: !!process.env.SPREADSHEET_ID,
     hasSessionSecret: !!process.env.SESSION_SECRET,
+    hasPayUConfig: !!(process.env.PAYU_POS_ID && process.env.PAYU_MD5_KEY),
     nodeEnv: process.env.NODE_ENV || 'development'
   });
 });
