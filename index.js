@@ -198,6 +198,7 @@ app.post('/api/create-payment', async (req, res) => {
       details: error.message
     });
   }
+});
 
 // PayU webhook endpoint
 app.post('/api/payu-webhook', async (req, res) => {
