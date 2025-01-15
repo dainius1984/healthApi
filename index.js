@@ -169,11 +169,11 @@ app.post('/api/create-payment', async (req, res) => {
     // Prepare order data for PayU
     const orderData = payuService.createOrderData(
       {
-        orderNumber: req.body['Numer zamowienia'],
-        cart: JSON.parse(req.body.Produkty),
-        total: parseFloat(req.body['Suma'])
+        orderNumber: req.body.orderData.orderNumber,
+        cart: req.body.orderData.cart,
+        total: req.body.orderData.total
       },
-      req.body,
+      req.body.customerData,
       req.ip
     );
 
@@ -185,20 +185,19 @@ app.post('/api/create-payment', async (req, res) => {
       'PayU OrderId': payuResponse.orderId
     });
 
-    res.json({
+    return res.json({
       success: true,
       redirectUrl: payuResponse.redirectUrl,
       orderId: payuResponse.orderId
     });
-
+  
   } catch (error) {
     console.error('Payment processing error:', error);
-    res.status(500).json({
+    return res.status(500).json({
       error: 'Payment creation failed',
       details: error.message
     });
   }
-});
 
 // PayU webhook endpoint
 app.post('/api/payu-webhook', async (req, res) => {
