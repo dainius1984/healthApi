@@ -161,6 +161,7 @@ app.post('/api/create-payment', async (req, res) => {
 
     // First save order to Google Sheet
     const sheetRow = await handleSheetRequest(req, res);
+    if (!sheetRow) return; // Add this to prevent multiple responses
 
     // Get PayU authorization token
     const accessToken = await payuService.getAuthToken();
