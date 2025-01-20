@@ -157,7 +157,9 @@ async function handleSheetRequest(req, res) {
 // Payment endpoints
 app.post('/api/create-payment', async (req, res) => {
   try {
-    console.log('Payment request received:', req.body);
+    console.log('Raw request body:', req.body);
+    console.log('Order data:', req.body.orderData);
+    console.log('Customer data:', req.body.customerData);
 
     // First save order to Google Sheet
     const sheetRow = await handleSheetRequest(req, res);
