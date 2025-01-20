@@ -14,24 +14,21 @@ class PayUService {
 // Fix this in payu.service.js
 async getAuthToken() {
   try {
-    console.log('PayU Auth URL:', `${this.baseUrl}/pl/standard/user/oauth/authorize`);
-    console.log('PayU Auth Data:', {
-      grant_type: 'client_credentials',
-      client_id: this.clientId,
-      client_secret: this.clientSecret
-    });
-    const response = await axios.post(
-      `${this.baseUrl}/pl/standard/user/oauth/authorize`,
-      {
-        grant_type: 'client_credentials',
-        client_id: this.clientId,
-        client_secret: this.clientSecret
+    const url = `${this.baseUrl}/pl/standard/user/oauth/authorize`;
+    const formData = new URLSearchParams();
+    formData.append('grant_type', 'client_credentials');
+    formData.append('client_id', this.clientId);
+    formData.append('client_secret', this.clientSecret);
+
+    const response = await axios.post(url, formData, {
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
       }
-    );
+    });
     return response.data.access_token;
   } catch (error) {
-    console.error('Full PayU error:', error);
-    throw error;
+    console.error('Full PayU error:', error.response?.data || error);
+    throw new Error('Failed to get PayU authorization token');
   }
 }
 
