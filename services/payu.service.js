@@ -14,7 +14,8 @@ class PayUService {
 // Fix this in payu.service.js
 async getAuthToken() {
   try {
-    const url = `${this.baseUrl}/oauth/authorize`;  // Changed URL path
+// Incorrect URL - should be:
+const url = `${this.baseUrl}/pl/standard/user/oauth/authorize`;// Changed URL path
     const formData = new URLSearchParams();
     formData.append('grant_type', 'client_credentials');
     formData.append('client_id', this.clientId);
@@ -75,6 +76,7 @@ async getAuthToken() {
 
   async createOrder(orderData, accessToken) {
     try {
+      console.log('Order data being sent:', orderData); // Add this log
       const signature = this.calculateSignature(orderData);
       
       const response = await axios.post(
