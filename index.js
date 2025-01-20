@@ -157,8 +157,9 @@ app.post('/api/create-payment', async (req, res) => {
       'Miasto': req.body.customerData.Miasto
     };
 
-    const sheetRow = await handleSheetRequest({ ...sheetData }, res);
-    if (!sheetRow) return;
+    const sheetRow = await handleSheetRequest({ 
+      body: sheetData  // Wrap in body object
+    }, res);
 
     const accessToken = await payuService.getAuthToken();
 
