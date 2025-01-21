@@ -87,12 +87,12 @@ app.post('/api/cart', authMiddleware, (req, res) => {
   return res.json({ success: true });
 });
 
-async function handleSheetRequest(req, res) {
+async function handleSheetRequest(data) {
   try {
-    console.log('Request received:', req.body);
+    console.log('Request received:', data);
 
-    if (!req.body || Object.keys(req.body).length === 0) {
-      return res.status(400).json({ error: 'Request body is required' });
+    if (!data || Object.keys(data).length === 0) {
+      throw new Error('Request data is required');
     }
 
     const requiredFields = [
@@ -159,7 +159,15 @@ app.post('/api/create-payment', async (req, res) => {
       'Miasto': req.body.customerData.Miasto
     };
 
-    const sheetRow = await handleSheetRequest(sheetData, res);
+    const sheetRow = await handleSheetRequest(sheetData);
+    if (!sheetRow) {
+      return res.status(400).json({ error: 'Failed to create sheet entry' });
+    }
+    
+    // Change update to save
+    await sheetRow.save({
+      'PayU OrderId': payuResponse.orderId
+    });
 
     const accessToken = await payuService.getAuthToken();
 
