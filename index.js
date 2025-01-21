@@ -25,6 +25,8 @@ app.use(cors({
     'https://viking-eta.vercel.app',
     'https://familybalance.pl',
     'https://www.familybalance.pl',
+    'https://secure.snd.payu.com',    // Add this
+    'https://www.payu.pl', 
     'https://sandbox.payu.com'
   ],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -157,19 +159,17 @@ app.post('/api/create-payment', async (req, res) => {
       'Miasto': req.body.customerData.Miasto
     };
 
-    const sheetRow = await handleSheetRequest({ 
-      body: sheetData  // Wrap in body object
-    }, res);
+    const sheetRow = await handleSheetRequest(sheetData, res);
 
     const accessToken = await payuService.getAuthToken();
 
     const orderData = payuService.createOrderData(
       {
-        orderNumber: req.body.orderData.orderNumber,
-        cart: req.body.orderData.cart,
-        total: req.body.orderData.total
+        orderNumber: req.body.orderData.orderNumber, // This is ok
+        cart: req.body.orderData.cart,  // This is ok
+        total: req.body.orderData.total // This is ok
       },
-      req.body.customerData,
+      req.body.customerData,  // This is ok
       req.ip
     );
 
