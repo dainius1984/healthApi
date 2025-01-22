@@ -3,15 +3,14 @@ const express = require('express');
 const cors = require('cors');
 const { GoogleSpreadsheet } = require('google-spreadsheet');
 const session = require('express-session');
-const MongoStore = require('connect-mongo');
 const axios = require('axios');
 const payuService = require('./services/payu.service');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Use MongoDB for session storage in production
-const sessionConfig = {
+// Simple session configuration
+app.use(session({
   secret: process.env.SESSION_SECRET || 'your-secret-key',
   resave: false,
   saveUninitialized: true,
@@ -20,34 +19,17 @@ const sessionConfig = {
     httpOnly: true,
     maxAge: 24 * 60 * 60 * 1000
   }
-};
-
-if (process.env.NODE_ENV === 'production' && process.env.MONGODB_URI) {
-  sessionConfig.store = MongoStore.create({
-    mongoUrl: process.env.MONGODB_URI,
-    ttl: 24 * 60 * 60 // 1 day
-  });
-}
-
-app.use(session(sessionConfig));
-
-const allowedOrigins = [
-  'https://viking-eta.vercel.app',
-  'https://familybalance.pl',
-  'https://www.familybalance.pl',
-  'https://secure.snd.payu.com',
-  'https://www.payu.pl', 
-  'https://sandbox.payu.com'
-];
+}));
 
 app.use(cors({
-  origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
+  origin: [
+    'https://viking-eta.vercel.app',
+    'https://familybalance.pl',
+    'https://www.familybalance.pl',
+    'https://secure.snd.payu.com',
+    'https://www.payu.pl', 
+    'https://sandbox.payu.com'
+  ],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   credentials: true,
   allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'OpenPayU-Signature'],
@@ -55,17 +37,13 @@ app.use(cors({
 
 app.use(express.json());
 
-// Improved error handler middleware
+// Middleware to handle errors
 const errorHandler = (err, req, res, next) => {
   console.error('Error:', err);
-  const statusCode = err.status || 500;
-  const errorMessage = process.env.NODE_ENV === 'production' 
-    ? 'Internal server error' 
-    : err.message;
-
-  res.status(statusCode).json({
-    error: errorMessage,
-    ...(process.env.NODE_ENV !== 'production' && { stack: err.stack })
+  res.status(err.status || 500).json({
+    error: process.env.NODE_ENV === 'production' 
+      ? 'Internal server error' 
+      : err.message
   });
 };
 
@@ -116,12 +94,12 @@ async function handleSheetRequest(data) {
     
     const rowData = {
       ...data,
-      'Status płatności': data['Status płatności'] || 'PENDING',
+      'Status płatności': 'PENDING',
       'Data zamówienia': new Date().toISOString()
     };
     
     const addedRow = await sheet.addRow(rowData);
-    console.log('Successfully added row to sheet:', rowData['Numer zamowienia']);
+    console.log('Successfully added row to sheet');
     
     return addedRow;
   } catch (error) {
@@ -150,14 +128,7 @@ app.post('/api/create-payment', async (req, res) => {
       throw new Error('Missing required order data');
     }
 
-    // Validate customer data
-    const requiredCustomerFields = ['Email', 'Telefon', 'Imie', 'Nazwisko', 'Ulica', 'Kod pocztowy', 'Miasto'];
-    const missingFields = requiredCustomerFields.filter(field => !customerData[field]);
-    if (missingFields.length > 0) {
-      throw new Error(`Missing customer data: ${missingFields.join(', ')}`);
-    }
-
-    // Generate order number first
+    // Generate order number if not present
     orderNumber = orderData.orderNumber || 
       `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
     
@@ -174,43 +145,33 @@ app.post('/api/create-payment', async (req, res) => {
       'Miasto': customerData.Miasto
     };
 
-    try {
-      // Get PayU auth token
-      const accessToken = await payuService.getAuthToken();
+    // Get PayU auth token first
+    const accessToken = await payuService.getAuthToken();
 
-      // Create PayU order
-      const payuOrderData = payuService.createOrderData(
-        {
-          orderNumber,
-          cart: orderData.cart,
-          total: orderData.total
-        },
-        customerData,
-        req.ip || '127.0.0.1'
-      );
+    // Create PayU order
+    const payuOrderData = payuService.createOrderData(
+      {
+        orderNumber,
+        cart: orderData.cart,
+        total: orderData.total
+      },
+      customerData,
+      req.ip || '127.0.0.1'
+    );
 
-      const payuResponse = await payuService.createOrder(payuOrderData, accessToken);
+    const payuResponse = await payuService.createOrder(payuOrderData, accessToken);
 
-      // Only after successful PayU order creation, add PayU OrderId and save to sheet
-      sheetData['PayU OrderId'] = payuResponse.orderId;
-      await handleSheetRequest(sheetData);
+    // Add PayU OrderId to sheet data
+    sheetData['PayU OrderId'] = payuResponse.orderId;
+    await handleSheetRequest(sheetData);
 
-      return res.json({
-        success: true,
-        redirectUrl: payuResponse.redirectUrl,
-        orderId: payuResponse.orderId,
-        orderNumber: orderNumber
-      });
+    return res.json({
+      success: true,
+      redirectUrl: payuResponse.redirectUrl,
+      orderId: payuResponse.orderId,
+      orderNumber: orderNumber
+    });
 
-    } catch (payuError) {
-      // If PayU fails, still try to save order to sheet but mark as failed
-      sheetData['Status płatności'] = 'FAILED';
-      sheetData['Error'] = payuError.message;
-      await handleSheetRequest(sheetData);
-      
-      throw new Error(`PayU payment failed: ${payuError.message}`);
-    }
-  
   } catch (error) {
     console.error('Payment processing error:', error);
     return res.status(500).json({
@@ -227,20 +188,16 @@ app.post('/api/payu-webhook', async (req, res) => {
   try {
     console.log('PayU webhook received:', req.body);
     
-    // Validate webhook signature
     const signature = req.headers['openpayu-signature']?.split(';')[0]?.split('=')[1];
     if (!signature || !payuService.validateWebhookSignature(req.body, signature)) {
-      console.error('Invalid webhook signature');
       return res.status(400).json({ error: 'Invalid signature' });
     }
 
     const { order } = req.body;
     if (!order?.orderId || !order?.status) {
-      console.error('Invalid webhook payload:', req.body);
       return res.status(400).json({ error: 'Invalid webhook payload' });
     }
 
-    // Update order in Google Sheets
     const doc = new GoogleSpreadsheet(process.env.SPREADSHEET_ID);
     await doc.useServiceAccountAuth({
       client_email: process.env.GOOGLE_CLIENT_EMAIL,
@@ -279,7 +236,6 @@ app.listen(PORT, () => {
     hasSpreadsheetId: !!process.env.SPREADSHEET_ID,
     hasSessionSecret: !!process.env.SESSION_SECRET,
     hasPayUConfig: !!(process.env.PAYU_POS_ID && process.env.PAYU_MD5_KEY),
-    hasMongoDb: !!process.env.MONGODB_URI,
     nodeEnv: process.env.NODE_ENV || 'development'
   });
 });
