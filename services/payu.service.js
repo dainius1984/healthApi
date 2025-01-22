@@ -20,7 +20,7 @@ class PayUService {
       throw new Error(`Missing required environment variables: ${missingEnvVars.join(', ')}`);
     }
 
-    this.baseUrl = process.env.PAYU_SANDBOX_BASE_URL;
+    this.baseUrl = process.env.PAYU_SANDBOX_BASE_URL.replace(/\/$/, '');
     this.posId = process.env.PAYU_POS_ID;
     this.md5Key = process.env.PAYU_MD5_KEY;
     this.clientId = process.env.PAYU_OAUTH_CLIENT_ID;
@@ -35,7 +35,7 @@ class PayUService {
 
   async getAuthToken() {
     try {
-      const url = `${this.baseUrl}/pl/standard/user/oauth/authorize`;
+      const url = `${this.baseUrl}/oauth/token`;
       const formData = new URLSearchParams();
       formData.append('grant_type', 'client_credentials');
       formData.append('client_id', this.clientId);
@@ -57,6 +57,7 @@ class PayUService {
       });
 
       if (!response.data?.access_token) {
+        console.error('Invalid auth response:', response.data);
         throw new Error('Invalid auth response from PayU');
       }
 
@@ -68,34 +69,11 @@ class PayUService {
     }
   }
 
-  validateCustomerData(customerData) {
-    const requiredFields = ['Email', 'Telefon', 'Imie', 'Nazwisko'];
-    const missingFields = requiredFields.filter(field => !customerData[field]);
-    
-    if (missingFields.length > 0) {
-      throw new Error(`Missing customer data: ${missingFields.join(', ')}`);
-    }
-
-    // Validate email format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(customerData.Email)) {
-      throw new Error('Invalid email format');
-    }
-
-    // Validate phone number (basic validation)
-    if (customerData.Telefon.length < 9) {
-      throw new Error('Invalid phone number');
-    }
-
-    return true;
-  }
-
   createOrderData(orderDetails, customerData, customerIp) {
     console.log('Creating order data:', { 
       orderNumber: orderDetails.orderNumber,
       total: orderDetails.total,
-      cartItems: orderDetails.cart.length,
-      shipping: orderDetails.shipping // Log shipping info
+      cartItems: orderDetails.cart.length 
     });
 
     if (!orderDetails?.orderNumber) {
@@ -113,7 +91,11 @@ class PayUService {
     }
 
     // Validate customer data
-    this.validateCustomerData(customerData);
+    const requiredFields = ['Email', 'Telefon', 'Imie', 'Nazwisko'];
+    const missingFields = requiredFields.filter(field => !customerData[field]);
+    if (missingFields.length > 0) {
+      throw new Error(`Missing customer data: ${missingFields.join(', ')}`);
+    }
 
     // Validate and format products with proper rounding
     const products = orderDetails.cart.map(item => {
@@ -135,24 +117,21 @@ class PayUService {
       };
     });
 
-    // Add shipping as a separate product if present
-    if (orderDetails.shipping) {
-      products.push({
-        name: 'Shipping - DPD',
-        unitPrice: Math.round(15 * 100), // 15 PLN shipping cost
-        quantity: 1
-      });
-    }
+    // Add shipping as separate product
+    products.push({
+      name: 'Shipping - DPD',
+      unitPrice: 1500, // 15 PLN
+      quantity: 1
+    });
 
-    // Calculate total amount from products including shipping
+    // Calculate total amount from products
     const calculatedTotal = products.reduce((sum, product) => 
       sum + (product.unitPrice * product.quantity), 0);
 
     console.log('Order totals comparison:', {
       providedTotal: total,
       calculatedTotal: calculatedTotal,
-      difference: Math.abs(total - calculatedTotal),
-      hasShipping: !!orderDetails.shipping
+      difference: Math.abs(total - calculatedTotal)
     });
 
     // Allow for difference up to 1 PLN (100 groszy) due to rounding
@@ -162,8 +141,8 @@ class PayUService {
 
     // Create PayU order object
     const orderData = {
-      customerIp: customerIp || '127.0.0.1',
       merchantPosId: this.posId,
+      customerIp: customerIp || '127.0.0.1',
       extOrderId: orderDetails.orderNumber,
       description: `Family Balance Order ${orderDetails.orderNumber}`,
       currencyCode: 'PLN',
@@ -184,8 +163,7 @@ class PayUService {
     console.log('Created PayU order data:', {
       orderNumber: orderData.extOrderId,
       totalAmount: orderData.totalAmount,
-      productsCount: orderData.products.length,
-      includesShipping: products.some(p => p.name.includes('Shipping'))
+      productsCount: orderData.products.length
     });
 
     return orderData;
@@ -245,9 +223,21 @@ class PayUService {
         extOrderId: orderData.extOrderId
       };
     } catch (error) {
+      if (error.response?.status === 401) {
+        // Try to refresh token and retry once
+        try {
+          const newToken = await this.getAuthToken();
+          return await this.createOrder(orderData, newToken);
+        } catch (retryError) {
+          console.error('PayU order retry failed:', retryError);
+          throw retryError;
+        }
+      }
+
       console.error('PayU order creation error:', {
         error: error.response?.data || error.message,
-        orderNumber: orderData.extOrderId
+        orderNumber: orderData.extOrderId,
+        status: error.response?.status
       });
       
       throw new Error('Failed to create PayU order: ' + 
