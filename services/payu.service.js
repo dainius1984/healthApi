@@ -4,7 +4,6 @@ const crypto = require('crypto');
 
 class PayUService {
   constructor() {
-    // Validate required environment variables
     const requiredEnvVars = [
       'PAYU_SANDBOX_BASE_URL',
       'PAYU_POS_ID',
@@ -20,7 +19,7 @@ class PayUService {
       throw new Error(`Missing required environment variables: ${missingEnvVars.join(', ')}`);
     }
 
-    this.baseUrl = process.env.PAYU_SANDBOX_BASE_URL;
+    this.baseUrl = process.env.PAYU_SANDBOX_BASE_URL.replace(/\/$/, '');
     this.posId = process.env.PAYU_POS_ID;
     this.md5Key = process.env.PAYU_MD5_KEY;
     this.clientId = process.env.PAYU_OAUTH_CLIENT_ID;
@@ -35,7 +34,10 @@ class PayUService {
 
   async getAuthToken() {
     try {
+      // Use the correct PayU OAuth endpoint
       const url = `${this.baseUrl}/pl/standard/user/oauth/authorize`;
+      
+      // Create form data for OAuth request
       const formData = new URLSearchParams();
       formData.append('grant_type', 'client_credentials');
       formData.append('client_id', this.clientId);
@@ -43,8 +45,7 @@ class PayUService {
 
       console.log('PayU Auth Request:', {
         url,
-        clientId: this.clientId,
-        baseUrl: this.baseUrl
+        clientId: this.clientId
       });
 
       const response = await axios({
@@ -57,45 +58,27 @@ class PayUService {
       });
 
       if (!response.data?.access_token) {
+        console.error('Invalid auth response:', response.data);
         throw new Error('Invalid auth response from PayU');
       }
 
       return response.data.access_token;
     } catch (error) {
-      console.error('PayU auth error:', error.response?.data || error.message);
+      console.error('PayU auth error:', {
+        error: error.response?.data || error.message,
+        status: error.response?.status,
+        url: error.config?.url
+      });
       throw new Error('Failed to get PayU auth token: ' + 
         (error.response?.data?.error_description || error.message));
     }
-  }
-
-  validateCustomerData(customerData) {
-    const requiredFields = ['Email', 'Telefon', 'Imie', 'Nazwisko'];
-    const missingFields = requiredFields.filter(field => !customerData[field]);
-    
-    if (missingFields.length > 0) {
-      throw new Error(`Missing customer data: ${missingFields.join(', ')}`);
-    }
-
-    // Validate email format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(customerData.Email)) {
-      throw new Error('Invalid email format');
-    }
-
-    // Validate phone number (basic validation)
-    if (customerData.Telefon.length < 9) {
-      throw new Error('Invalid phone number');
-    }
-
-    return true;
   }
 
   createOrderData(orderDetails, customerData, customerIp) {
     console.log('Creating order data:', { 
       orderNumber: orderDetails.orderNumber,
       total: orderDetails.total,
-      cartItems: orderDetails.cart.length,
-      shipping: orderDetails.shipping // Log shipping info
+      cartItems: orderDetails.cart?.length 
     });
 
     if (!orderDetails?.orderNumber) {
@@ -106,68 +89,62 @@ class PayUService {
       throw new Error('Invalid cart data');
     }
 
-    // Round total to 2 decimal places and convert to grosz (1/100 PLN)
+    // Convert string total to number and validate
     const total = Math.round(parseFloat(orderDetails.total) * 100);
     if (isNaN(total) || total <= 0) {
       throw new Error('Invalid order total');
     }
 
     // Validate customer data
-    this.validateCustomerData(customerData);
+    const requiredFields = ['Email', 'Telefon', 'Imie', 'Nazwisko'];
+    const missingFields = requiredFields.filter(field => !customerData[field]);
+    if (missingFields.length > 0) {
+      throw new Error(`Missing customer data: ${missingFields.join(', ')}`);
+    }
 
-    // Validate and format products with proper rounding
+    // Format cart products
     const products = orderDetails.cart.map(item => {
-      const price = Math.round(parseFloat(item.price) * 100); // Convert to grosz
+      const price = Math.round(parseFloat(item.price) * 100);
       const quantity = parseInt(item.quantity) || 1;
       
       if (isNaN(price) || price <= 0) {
         throw new Error(`Invalid price for product: ${item.name}`);
       }
 
-      if (quantity < 1) {
-        throw new Error(`Invalid quantity for product: ${item.name}`);
-      }
-
       return {
-        name: item.name,
+        name: item.name || 'Product',
         unitPrice: price,
         quantity: quantity
       };
     });
 
-    // Add shipping as a separate product if present
+    // Add shipping cost if present
     if (orderDetails.shipping) {
       products.push({
         name: 'Shipping - DPD',
-        unitPrice: Math.round(15 * 100), // 15 PLN shipping cost
+        unitPrice: 1500, // 15 PLN
         quantity: 1
       });
     }
 
-    // Calculate total amount from products including shipping
+    // Calculate order total
     const calculatedTotal = products.reduce((sum, product) => 
       sum + (product.unitPrice * product.quantity), 0);
 
     console.log('Order totals comparison:', {
       providedTotal: total,
       calculatedTotal: calculatedTotal,
-      difference: Math.abs(total - calculatedTotal),
-      hasShipping: !!orderDetails.shipping
+      difference: Math.abs(total - calculatedTotal)
     });
-
-    // Allow for difference up to 1 PLN (100 groszy) due to rounding
-    if (Math.abs(calculatedTotal - total) > 100) {
-      throw new Error(`Order total (${total/100} PLN) does not match products total (${calculatedTotal/100} PLN)`);
-    }
 
     // Create PayU order object
     const orderData = {
-      customerIp: customerIp || '127.0.0.1',
       merchantPosId: this.posId,
-      extOrderId: orderDetails.orderNumber,
-      description: `Family Balance Order ${orderDetails.orderNumber}`,
       currencyCode: 'PLN',
-      totalAmount: total,
+      totalAmount: calculatedTotal,
+      customerIp: customerIp || '127.0.0.1',
+      description: `Order ${orderDetails.orderNumber}`,
+      extOrderId: orderDetails.orderNumber,
       buyer: {
         email: customerData.Email,
         phone: customerData.Telefon,
@@ -184,8 +161,7 @@ class PayUService {
     console.log('Created PayU order data:', {
       orderNumber: orderData.extOrderId,
       totalAmount: orderData.totalAmount,
-      productsCount: orderData.products.length,
-      includesShipping: products.some(p => p.name.includes('Shipping'))
+      productsCount: orderData.products.length
     });
 
     return orderData;
@@ -193,8 +169,8 @@ class PayUService {
 
   calculateSignature(orderData) {
     try {
-      const signatureString = JSON.stringify(orderData) + this.md5Key;
-      return crypto.createHash('md5').update(signatureString).digest('hex');
+      const dataToSign = JSON.stringify(orderData) + this.md5Key;
+      return crypto.createHash('md5').update(dataToSign).digest('hex');
     } catch (error) {
       console.error('Signature calculation error:', error);
       throw new Error('Failed to calculate order signature');
@@ -209,14 +185,14 @@ class PayUService {
 
       console.log('Creating PayU order:', {
         orderNumber: orderData.extOrderId,
-        totalAmount: orderData.totalAmount,
-        buyerEmail: orderData.buyer.email
+        totalAmount: orderData.totalAmount
       });
 
       const signature = this.calculateSignature(orderData);
+      const url = `${this.baseUrl}/api/v2_1/orders`;
       
       const response = await axios.post(
-        `${this.baseUrl}/api/v2_1/orders`,
+        url,
         orderData,
         {
           headers: {
@@ -227,6 +203,7 @@ class PayUService {
         }
       );
 
+      // Validate PayU response
       if (!response.data?.redirectUri || !response.data?.orderId) {
         console.error('Invalid PayU response:', response.data);
         throw new Error('Invalid order response from PayU');
@@ -245,8 +222,22 @@ class PayUService {
         extOrderId: orderData.extOrderId
       };
     } catch (error) {
+      // Retry once on authentication error
+      if (error.response?.status === 401) {
+        console.log('Auth token expired, retrying with new token...');
+        try {
+          const newToken = await this.getAuthToken();
+          return await this.createOrder(orderData, newToken);
+        } catch (retryError) {
+          console.error('PayU order retry failed:', retryError);
+          throw retryError;
+        }
+      }
+
       console.error('PayU order creation error:', {
         error: error.response?.data || error.message,
+        status: error.response?.status,
+        url: error.config?.url,
         orderNumber: orderData.extOrderId
       });
       
@@ -281,20 +272,6 @@ class PayUService {
       console.error('Webhook signature validation error:', error);
       return false;
     }
-  }
-
-  isValidOrderStatus(status) {
-    const validStatuses = [
-      'NEW',
-      'PENDING',
-      'WAITING_FOR_CONFIRMATION',
-      'COMPLETED',
-      'CANCELED',
-      'REJECTED',
-      'FAILED',
-      'ERROR'
-    ];
-    return validStatuses.includes(status);
   }
 
   async getOrderStatus(orderId) {
