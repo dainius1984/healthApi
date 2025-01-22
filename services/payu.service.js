@@ -94,7 +94,8 @@ class PayUService {
     console.log('Creating order data:', { 
       orderNumber: orderDetails.orderNumber,
       total: orderDetails.total,
-      cartItems: orderDetails.cart.length 
+      cartItems: orderDetails.cart.length,
+      shipping: orderDetails.shipping // Log shipping info
     });
 
     if (!orderDetails?.orderNumber) {
@@ -134,14 +135,24 @@ class PayUService {
       };
     });
 
-    // Calculate total amount from products
+    // Add shipping as a separate product if present
+    if (orderDetails.shipping) {
+      products.push({
+        name: 'Shipping - DPD',
+        unitPrice: Math.round(15 * 100), // 15 PLN shipping cost
+        quantity: 1
+      });
+    }
+
+    // Calculate total amount from products including shipping
     const calculatedTotal = products.reduce((sum, product) => 
       sum + (product.unitPrice * product.quantity), 0);
 
     console.log('Order totals comparison:', {
       providedTotal: total,
       calculatedTotal: calculatedTotal,
-      difference: Math.abs(total - calculatedTotal)
+      difference: Math.abs(total - calculatedTotal),
+      hasShipping: !!orderDetails.shipping
     });
 
     // Allow for difference up to 1 PLN (100 groszy) due to rounding
@@ -173,7 +184,8 @@ class PayUService {
     console.log('Created PayU order data:', {
       orderNumber: orderData.extOrderId,
       totalAmount: orderData.totalAmount,
-      productsCount: orderData.products.length
+      productsCount: orderData.products.length,
+      includesShipping: products.some(p => p.name.includes('Shipping'))
     });
 
     return orderData;
