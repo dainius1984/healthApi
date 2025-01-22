@@ -91,7 +91,11 @@ class PayUService {
   }
 
   createOrderData(orderDetails, customerData, customerIp) {
-    console.log('Creating order data:', { orderDetails, customerData });
+    console.log('Creating order data:', { 
+      orderNumber: orderDetails.orderNumber,
+      total: orderDetails.total,
+      cartItems: orderDetails.cart.length 
+    });
 
     if (!orderDetails?.orderNumber) {
       throw new Error('Order number is required');
@@ -101,7 +105,8 @@ class PayUService {
       throw new Error('Invalid cart data');
     }
 
-    const total = parseFloat(orderDetails.total);
+    // Round total to 2 decimal places and convert to grosz (1/100 PLN)
+    const total = Math.round(parseFloat(orderDetails.total) * 100);
     if (isNaN(total) || total <= 0) {
       throw new Error('Invalid order total');
     }
@@ -109,9 +114,9 @@ class PayUService {
     // Validate customer data
     this.validateCustomerData(customerData);
 
-    // Validate and format products
+    // Validate and format products with proper rounding
     const products = orderDetails.cart.map(item => {
-      const price = parseFloat(item.price);
+      const price = Math.round(parseFloat(item.price) * 100); // Convert to grosz
       const quantity = parseInt(item.quantity) || 1;
       
       if (isNaN(price) || price <= 0) {
@@ -124,17 +129,24 @@ class PayUService {
 
       return {
         name: item.name,
-        unitPrice: Math.round(price * 100),
+        unitPrice: price,
         quantity: quantity
       };
     });
 
-    // Calculate total amount from products to verify against order total
+    // Calculate total amount from products
     const calculatedTotal = products.reduce((sum, product) => 
       sum + (product.unitPrice * product.quantity), 0);
 
-    if (Math.abs(calculatedTotal - Math.round(total * 100)) > 1) {
-      throw new Error('Order total does not match products total');
+    console.log('Order totals comparison:', {
+      providedTotal: total,
+      calculatedTotal: calculatedTotal,
+      difference: Math.abs(total - calculatedTotal)
+    });
+
+    // Allow for difference up to 1 PLN (100 groszy) due to rounding
+    if (Math.abs(calculatedTotal - total) > 100) {
+      throw new Error(`Order total (${total/100} PLN) does not match products total (${calculatedTotal/100} PLN)`);
     }
 
     // Create PayU order object
@@ -144,7 +156,7 @@ class PayUService {
       extOrderId: orderDetails.orderNumber,
       description: `Family Balance Order ${orderDetails.orderNumber}`,
       currencyCode: 'PLN',
-      totalAmount: Math.round(total * 100),
+      totalAmount: total,
       buyer: {
         email: customerData.Email,
         phone: customerData.Telefon,
@@ -158,7 +170,7 @@ class PayUService {
       validityTime: 3600
     };
 
-    console.log('Created order data:', {
+    console.log('Created PayU order data:', {
       orderNumber: orderData.extOrderId,
       totalAmount: orderData.totalAmount,
       productsCount: orderData.products.length
