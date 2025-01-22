@@ -116,6 +116,7 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Inside the create-payment route
 app.post('/api/create-payment', async (req, res) => {
   let orderNumber;
   
@@ -131,7 +132,7 @@ app.post('/api/create-payment', async (req, res) => {
     // Generate order number if not present
     orderNumber = orderData.orderNumber || 
       `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-    
+
     // Prepare sheet data
     const sheetData = {
       'Numer zamowienia': orderNumber,
@@ -142,7 +143,9 @@ app.post('/api/create-payment', async (req, res) => {
       'Nazwisko': customerData.Nazwisko,
       'Ulica': customerData.Ulica,
       'Kod pocztowy': customerData['Kod pocztowy'],
-      'Miasto': customerData.Miasto
+      'Miasto': customerData.Miasto,
+      'Metoda dostawy': orderData.shipping || 'DPD',
+      'Koszt dostawy': '15.00 PLN'
     };
 
     // Get PayU auth token first
@@ -153,7 +156,8 @@ app.post('/api/create-payment', async (req, res) => {
       {
         orderNumber,
         cart: orderData.cart,
-        total: orderData.total
+        total: orderData.total,
+        shipping: orderData.shipping
       },
       customerData,
       req.ip || '127.0.0.1'
@@ -179,7 +183,7 @@ app.post('/api/create-payment', async (req, res) => {
       details: process.env.NODE_ENV === 'production' 
         ? 'An error occurred while processing the payment' 
         : error.message,
-      orderNumber // Return order number even on failure
+      orderNumber
     });
   }
 });
