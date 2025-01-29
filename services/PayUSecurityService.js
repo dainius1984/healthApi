@@ -1,4 +1,4 @@
-// src/services/security/PayUSecurityService.js
+// PayUSecurityService.js
 const crypto = require('crypto');
 
 class PayUSecurityService {
@@ -23,21 +23,25 @@ class PayUSecurityService {
         return false;
       }
 
+      console.log('Validating webhook signature:', {
+        receivedSignature: signature,
+        bodyLength: JSON.stringify(body).length,
+        keyLength: this.config.md5Key.length
+      });
+
       const calculatedSignature = crypto
         .createHash('md5')
         .update(JSON.stringify(body) + this.config.md5Key)
         .digest('hex');
       
-      const isValid = calculatedSignature === signature;
-      
-      if (!isValid) {
-        console.error('Signature validation failed:', {
-          received: signature,
-          calculated: calculatedSignature
-        });
-      }
-      
-      return isValid;
+      // Log both signatures for comparison
+      console.log('Signature comparison:', {
+        received: signature,
+        calculated: calculatedSignature,
+        match: calculatedSignature === signature
+      });
+
+      return calculatedSignature === signature;
     } catch (error) {
       console.error('Webhook signature validation error:', error);
       return false;

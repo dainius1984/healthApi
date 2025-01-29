@@ -148,15 +148,31 @@ app.post('/api/create-payment', async (req, res) => {
 // PayU webhook route
 app.post('/api/payu-webhook', async (req, res) => {
   try {
-    console.log('PayU webhook received:', req.body);
+    console.log('PayU webhook received:', {
+      headers: req.headers,
+      body: req.body
+    });
 
-    const signature = req.headers['openpayu-signature']?.split(';')[0]?.split('=')[1];
-    if (!signature || !securityService.validateWebhookSignature(req.body, signature)) {
+    const signature = req.headers['openpayu-signature']?.split(';')
+      .find(part => part.startsWith('signature='))?.split('=')[1];
+
+    console.log('Extracted signature:', signature);
+
+    if (!signature) {
+      console.error('No signature found in headers');
+      return res.status(400).json({ error: 'Missing signature' });
+    }
+
+    const isValid = securityService.validateWebhookSignature(req.body, signature);
+    
+    if (!isValid) {
+      console.error('Invalid signature');
       return res.status(400).json({ error: 'Invalid signature' });
     }
 
     const { order } = req.body;
     if (!order?.orderId || !order?.status) {
+      console.error('Invalid webhook payload:', req.body);
       return res.status(400).json({ error: 'Invalid webhook payload' });
     }
 
@@ -168,20 +184,4 @@ app.post('/api/payu-webhook', async (req, res) => {
     console.error('PayU webhook error:', error);
     return res.status(500).json({ error: 'Webhook processing failed' });
   }
-});
-
-// Add error handler middleware
-app.use(errorHandler);
-
-// Start server
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log('Environment check:', {
-    hasEmail: !!process.env.GOOGLE_CLIENT_EMAIL,
-    hasKey: !!process.env.GOOGLE_PRIVATE_KEY,
-    hasSpreadsheetId: !!process.env.SPREADSHEET_ID,
-    hasSessionSecret: !!process.env.SESSION_SECRET,
-    hasPayUConfig: !!(process.env.PAYU_POS_ID && process.env.PAYU_MD5_KEY),
-    nodeEnv: process.env.NODE_ENV || 'development'
-  });
 });
