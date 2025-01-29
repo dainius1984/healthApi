@@ -1,8 +1,8 @@
-const PayUConfig = require('../config/PayUConfig');
-const PayUAuthService = require('./auth/PayUAuthService');
-const PayUSecurityService = require('./security/PayUSecurityService');
-const PayUOrderDataBuilder = require('./orders/PayUOrderDataBuilder');
-const PayUOrderService = require('./orders/PayUOrderService');
+const PayUConfig = require('./PayUConfig');
+const PayUAuthService = require('./PayUAuthService');
+const PayUSecurityService = require('./PayUSecurityService');
+const PayUOrderDataBuilder = require('./PayUOrderDataBuilder');
+const PayUOrderService = require('./PayUOrderService');
 
 // Initialize services
 const config = new PayUConfig();
