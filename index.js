@@ -1,17 +1,36 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const { GoogleSpreadsheet } = require('google-spreadsheet');
 const session = require('express-session');
-const axios = require('axios');
-const payuService = require('./services/payu.service');
+const { orderService, orderDataBuilder, securityService } = require('./services/PayUService');
+const GoogleSheetsService = require('./services/googleSheets.service');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Simple session configuration
+// Validate required environment variables
+const requiredEnvVars = [
+  'SESSION_SECRET',
+  'GOOGLE_CLIENT_EMAIL',
+  'GOOGLE_PRIVATE_KEY',
+  'SPREADSHEET_ID',
+  'PAYU_POS_ID',
+  'PAYU_MD5_KEY',
+  'PAYU_OAUTH_CLIENT_ID',
+  'PAYU_OAUTH_CLIENT_SECRET',
+  'BASE_URL',
+  'FRONTEND_URL'
+];
+
+const missingEnvVars = requiredEnvVars.filter(envVar => !process.env[envVar]);
+if (missingEnvVars.length > 0) {
+  console.error('Missing required environment variables:', missingEnvVars.join(', '));
+  process.exit(1);
+}
+
+// Session configuration
 app.use(session({
-  secret: process.env.SESSION_SECRET || 'your-secret-key',
+  secret: process.env.SESSION_SECRET,
   resave: false,
   saveUninitialized: true,
   cookie: { 
@@ -21,6 +40,7 @@ app.use(session({
   }
 }));
 
+// CORS configuration
 app.use(cors({
   origin: [
     'https://viking-eta.vercel.app',
@@ -47,68 +67,7 @@ const errorHandler = (err, req, res, next) => {
   });
 };
 
-const authMiddleware = (req, res, next) => {
-  if (!req.session.userId) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
-  next();
-};
-
-async function handleSheetRequest(data) {
-  if (!data || Object.keys(data).length === 0) {
-    throw new Error('Request data is required');
-  }
-
-  const requiredFields = [
-    'Numer zamowienia',
-    'Email',
-    'Telefon',
-    'Produkty',
-    'Imie',
-    'Nazwisko',
-    'Ulica',
-    'Kod pocztowy',
-    'Miasto'
-  ];
-    
-  const missingFields = requiredFields.filter(field => !data[field]);
-  if (missingFields.length > 0) {
-    throw new Error(`Missing required fields: ${missingFields.join(', ')}`);
-  }
-
-  try {
-    const doc = new GoogleSpreadsheet(process.env.SPREADSHEET_ID);
-    const formattedKey = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n');
-
-    if (!formattedKey || !process.env.GOOGLE_CLIENT_EMAIL) {
-      throw new Error('Google Sheets credentials are missing');
-    }
-
-    await doc.useServiceAccountAuth({
-      client_email: process.env.GOOGLE_CLIENT_EMAIL,
-      private_key: formattedKey
-    });
-
-    await doc.loadInfo();
-    const sheet = doc.sheetsByIndex[0];
-    
-    const rowData = {
-      ...data,
-      'Status płatności': 'PENDING',
-      'Data zamówienia': new Date().toISOString()
-    };
-    
-    const addedRow = await sheet.addRow(rowData);
-    console.log('Successfully added row to sheet');
-    
-    return addedRow;
-  } catch (error) {
-    console.error('Sheet request error:', error);
-    throw new Error(`Failed to process sheet request: ${error.message}`);
-  }
-}
-    
-// Routes
+// Health check route
 app.get('/health', (req, res) => {
   res.json({ 
     status: 'ok',
@@ -116,10 +75,10 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Inside the create-payment route
+// Create payment route
 app.post('/api/create-payment', async (req, res) => {
   let orderNumber;
-  
+
   try {
     console.log('Payment request received:', req.body);
 
@@ -148,11 +107,8 @@ app.post('/api/create-payment', async (req, res) => {
       'Koszt dostawy': '15.00 PLN'
     };
 
-    // Get PayU auth token first
-    const accessToken = await payuService.getAuthToken();
-
-    // Create PayU order
-    const payuOrderData = payuService.createOrderData(
+    // Create PayU order data
+    const payuOrderData = orderDataBuilder.buildOrderData(
       {
         orderNumber,
         cart: orderData.cart,
@@ -163,11 +119,12 @@ app.post('/api/create-payment', async (req, res) => {
       req.ip || '127.0.0.1'
     );
 
-    const payuResponse = await payuService.createOrder(payuOrderData, accessToken);
+    // Create PayU order using the order service
+    const payuResponse = await orderService.createOrder(payuOrderData);
 
     // Add PayU OrderId to sheet data
     sheetData['PayU OrderId'] = payuResponse.orderId;
-    await handleSheetRequest(sheetData);
+    await GoogleSheetsService.addRow(sheetData);
 
     return res.json({
       success: true,
@@ -188,12 +145,13 @@ app.post('/api/create-payment', async (req, res) => {
   }
 });
 
+// PayU webhook route
 app.post('/api/payu-webhook', async (req, res) => {
   try {
     console.log('PayU webhook received:', req.body);
-    
+
     const signature = req.headers['openpayu-signature']?.split(';')[0]?.split('=')[1];
-    if (!signature || !payuService.validateWebhookSignature(req.body, signature)) {
+    if (!signature || !securityService.validateWebhookSignature(req.body, signature)) {
       return res.status(400).json({ error: 'Invalid signature' });
     }
 
@@ -202,24 +160,8 @@ app.post('/api/payu-webhook', async (req, res) => {
       return res.status(400).json({ error: 'Invalid webhook payload' });
     }
 
-    const doc = new GoogleSpreadsheet(process.env.SPREADSHEET_ID);
-    await doc.useServiceAccountAuth({
-      client_email: process.env.GOOGLE_CLIENT_EMAIL,
-      private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n')
-    });
-
-    await doc.loadInfo();
-    const sheet = doc.sheetsByIndex[0];
-    const rows = await sheet.getRows();
-    
-    const orderRow = rows.find(row => row['PayU OrderId'] === order.orderId);
-    if (orderRow) {
-      orderRow['Status płatności'] = order.status;
-      await orderRow.save();
-      console.log(`Updated order ${order.orderId} status to ${order.status}`);
-    } else {
-      console.warn(`Order ${order.orderId} not found in sheet`);
-    }
+    // Update order status in Google Sheets
+    await GoogleSheetsService.updateOrderStatus(order.orderId, order.status);
 
     return res.status(200).json({ status: 'OK' });
   } catch (error) {
