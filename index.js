@@ -3,7 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const session = require('express-session');
 const { orderService, orderDataBuilder, securityService } = require('./services/PayUService');
-const GoogleSheetsService = = require('./services/GoogleSheetsService');
+const GoogleSheetsService = require('./services/GoogleSheetsService');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
