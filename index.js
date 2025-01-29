@@ -3,10 +3,10 @@ const express = require('express');
 const cors = require('cors');
 const session = require('express-session');
 const { orderService, orderDataBuilder, securityService } = require('./services/PayUService');
-const GoogleSheetsService = require('./services/GoogleSheetsService');
+const GoogleSheetsService = require('./services/googleSheets.service');
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 10000;
 
 // Validate required environment variables
 const requiredEnvVars = [
@@ -82,13 +82,11 @@ app.post('/api/create-payment', async (req, res) => {
   try {
     console.log('Payment request received:', req.body);
 
-    // Validate request data
     const { orderData, customerData } = req.body;
     if (!orderData?.cart || !orderData?.total || !customerData) {
       throw new Error('Missing required order data');
     }
 
-    // Generate order number if not present
     orderNumber = orderData.orderNumber || 
       `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
@@ -107,7 +105,6 @@ app.post('/api/create-payment', async (req, res) => {
       'Koszt dostawy': '15.00 PLN'
     };
 
-    // Create PayU order data
     const payuOrderData = orderDataBuilder.buildOrderData(
       {
         orderNumber,
@@ -119,7 +116,7 @@ app.post('/api/create-payment', async (req, res) => {
       req.ip || '127.0.0.1'
     );
 
-    // Create PayU order using the order service
+    // Create PayU order
     const payuResponse = await orderService.createOrder(payuOrderData);
 
     // Add PayU OrderId to sheet data
@@ -184,4 +181,20 @@ app.post('/api/payu-webhook', async (req, res) => {
     console.error('PayU webhook error:', error);
     return res.status(500).json({ error: 'Webhook processing failed' });
   }
+});
+
+// Add error handler middleware
+app.use(errorHandler);
+
+// Start server
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server running on port ${PORT}`);
+  console.log('Environment check:', {
+    hasEmail: !!process.env.GOOGLE_CLIENT_EMAIL,
+    hasKey: !!process.env.GOOGLE_PRIVATE_KEY,
+    hasSpreadsheetId: !!process.env.SPREADSHEET_ID,
+    hasSessionSecret: !!process.env.SESSION_SECRET,
+    hasPayUConfig: !!(process.env.PAYU_POS_ID && process.env.PAYU_MD5_KEY),
+    nodeEnv: process.env.NODE_ENV || 'development'
+  });
 });
