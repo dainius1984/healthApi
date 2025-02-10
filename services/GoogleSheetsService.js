@@ -20,7 +20,7 @@ class GoogleSheetsService {
     await this.doc.loadInfo();
   }
 
-  async addRow(data) {
+   async addRow(data) {
     try {
       await this.init();
       const sheet = this.doc.sheetsByIndex[0];
@@ -33,27 +33,25 @@ class GoogleSheetsService {
     }
   }
 
-  async updateOrderStatus(payuOrderId, status) {
+  async updateOrderStatus(orderId, status) {
     try {
       await this.init();
       const sheet = this.doc.sheetsByIndex[0];
       const rows = await sheet.getRows();
-      const orderRow = rows.find(row => row['PayU OrderId'] === payuOrderId);
+      const orderRow = rows.find(row => row['PayU OrderId'] === orderId);
 
       if (orderRow) {
         orderRow['Status płatności'] = status;
         await orderRow.save();
-        console.log(`Updated order ${payuOrderId} status to ${status}`);
-        return true;
+        console.log(`Updated order ${orderId} status to ${status}`);
       } else {
-        console.warn(`Order ${payuOrderId} not found in sheet`);
-        return false;
+        console.warn(`Order ${orderId} not found in sheet`);
       }
     } catch (error) {
       console.error('Update order status error:', error);
       throw new Error(`Failed to update order status: ${error.message}`);
     }
   }
-}
+} 
 
 module.exports = new GoogleSheetsService();
