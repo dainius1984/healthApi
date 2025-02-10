@@ -78,14 +78,6 @@ const sessionConfig = {
   }
 };
 
-// CORS configuration
-const corsConfig = {
-  origin: corsOrigins,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  credentials: true,
-  allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'OpenPayU-Signature'],
-};
-
 // Environment status check
 const getEnvironmentStatus = () => ({
   hasEmail: !!process.env.GOOGLE_CLIENT_EMAIL,
