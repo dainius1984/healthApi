@@ -39,15 +39,32 @@ const validateEnvVars = () => {
   }
 };
 
-// CORS origins configuration
-const corsOrigins = [
-  'https://viking-eta.vercel.app',
-  'https://familybalance.pl',
-  'https://www.familybalance.pl',
-  'https://secure.snd.payu.com',
-  'https://www.payu.pl', 
-  'https://sandbox.payu.com'
-];
+// CORS configuration
+const corsConfig = {
+    origin: [
+      'https://viking-eta.vercel.app',
+      'https://familybalance.pl',
+      'https://www.familybalance.pl',
+      'https://secure.snd.payu.com',
+      'https://www.payu.pl', 
+      'https://sandbox.payu.com',
+      // Add development origins if needed
+      'http://localhost:3000',
+      'http://localhost:5173'
+    ],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    credentials: true,
+    allowedHeaders: [
+      'Content-Type', 
+      'Authorization', 
+      'Accept', 
+      'OpenPayU-Signature',
+      'Origin',
+      'X-Requested-With'
+    ],
+    exposedHeaders: ['OpenPayU-Signature'],
+    optionsSuccessStatus: 200
+  };
 
 // Session configuration
 const sessionConfig = {

@@ -14,6 +14,9 @@ const PORT = process.env.PORT || 10000;
 // Session configuration
 app.use(session(config.sessionConfig));
 
+// Pre-flight
+app.options('*', cors(config.corsConfig));
+
 // CORS configuration
 app.use(cors(config.corsConfig));
 
