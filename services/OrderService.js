@@ -23,6 +23,22 @@ class OrderService {
     return 0;
   }
 
+  // Helper method to format date for sheets
+  _formatDateForSheets(dateString) {
+    try {
+      const date = new Date(dateString);
+      // Format as DD.MM.YYYY
+      return date.toLocaleDateString('pl-PL', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+      });
+    } catch (error) {
+      console.error('Date formatting error:', error);
+      return new Date().toLocaleDateString('pl-PL');
+    }
+  }
+
   async createOrder(orderData, customerData, isAuthenticated, userId, ip) {
     console.log('Received in OrderService:', {
         orderData,
@@ -41,7 +57,7 @@ class OrderService {
       // Prepare sheet data with improved formatting and additional columns
       const sheetData = {
         'Numer zamowienia': `="${orderNumber}"`, // Wrap in Excel formula to display full number
-        'Data zamowienia': orderDate.toLocaleDateString('pl-PL'), // Localized date format
+        'Data zamowienia': this._formatDateForSheets(orderDate.toISOString()), // Formatted date
         'Email': customerData.Email,
         'Telefon': customerData.Telefon,
         'Produkty': JSON.stringify(orderData.items), // Ensure items are displayed clearly
