@@ -5,6 +5,12 @@ const { orderService: PayUOrderService, orderDataBuilder } = require('./PayUServ
 
 class OrderService {
   async createOrder(orderData, customerData, isAuthenticated, userId, ip) {
+    console.log('Received in OrderService:', {
+        orderData,
+        customerData,
+        isAuthenticated,
+        userId
+      });
     try {
       const orderNumber = orderData.orderNumber || 
         `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
