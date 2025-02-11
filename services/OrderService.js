@@ -40,6 +40,7 @@ class OrderService {
 
       // Store order based on authentication status
       if (isAuthenticated && userId) {
+        console.log('Attempting to save order to Appwrite:', { userId, orderNumber });
         try {
           const appwriteOrderData = {
             userId,
@@ -65,6 +66,8 @@ class OrderService {
         }
       } else {
         // Store in Google Sheets for guest users
+        console.log('Saving order to Google Sheets (guest user)');
+
         sheetData['PayU OrderId'] = payuResponse.orderId;
         await GoogleSheetsService.addRow(sheetData);
       }
