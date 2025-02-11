@@ -4,32 +4,36 @@ const GoogleSheetsService = require('./GoogleSheetsService');
 const { orderService: PayUOrderService, orderDataBuilder } = require('./PayUService');
 
 class OrderService {
-  async createOrder(orderData, customerData, isAuthenticated, userId, ip) {
-    console.log('Received in OrderService:', {
-        orderData,
-        customerData,
-        isAuthenticated,
-        userId
-      });
-    try {
-      const orderNumber = orderData.orderNumber || 
-        `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-
-      // Prepare sheet data
-      const sheetData = {
-        'Numer zamowienia': orderNumber,
-        'Email': customerData.Email,
-        'Telefon': customerData.Telefon,
-        'Produkty': orderData.items,
-        'Imie': customerData.Imie,
-        'Nazwisko': customerData.Nazwisko,
-        'Ulica': customerData.Ulica,
-        'Kod pocztowy': customerData['Kod pocztowy'],
-        'Miasto': customerData.Miasto,
-        'Metoda dostawy': orderData.shipping || 'DPD',
-        'Koszt dostawy': '15.00 PLN'
-      };
-
+    async createOrder(orderData, customerData, isAuthenticated, userId, ip) {
+      console.log('Received in OrderService:', {
+          orderData,
+          customerData,
+          isAuthenticated,
+          userId
+        });
+      try {
+        const orderDate = new Date();
+        const orderNumber = orderData.orderNumber || 
+          `ORD-${orderDate.toISOString().split('T')[0]}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+  
+        // Prepare sheet data with improved formatting and additional columns
+        const sheetData = {
+          'Numer zamowienia': `="${orderNumber}"`, // Wrap in Excel formula to display full number
+          'Data zamowienia': orderDate.toLocaleDateString('pl-PL'), // Localized date format
+          'Email': customerData.Email,
+          'Telefon': customerData.Telefon,
+          'Produkty': JSON.stringify(orderData.items), // Ensure items are displayed clearly
+          'Imie': customerData.Imie,
+          'Nazwisko': customerData.Nazwisko,
+          'Ulica': customerData.Ulica,
+          'Kod pocztowy': customerData['Kod pocztowy'],
+          'Miasto': customerData.Miasto,
+          'Status': 'Oczekujące', // Initial status
+          'Suma': `${orderData.total.toFixed(2)} PLN`, // Total with currency
+          'Metoda dostawy': orderData.shipping || 'DPD',
+          'Kurier': orderData.shipping || 'DPD', // Separate courier column
+          'Koszt dostawy': '15.00 PLN'
+        };
       // Create PayU order
       const payuOrderData = orderDataBuilder.buildOrderData(
         {
