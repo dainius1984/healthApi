@@ -57,7 +57,7 @@ class OrderService {
       // Prepare sheet data with improved formatting and additional columns
       const sheetData = {
         'Numer zamowienia': `="${orderNumber}"`, // Wrap in Excel formula to display full number
-        'Data zamowienia': this._formatDateForSheets(orderDate.toISOString()), // Formatted date
+        'Data zamowienia': new Date().toISOString(), // Formatted date
         'Email': customerData.Email,
         'Telefon': customerData.Telefon,
         'Produkty': JSON.stringify(orderData.items), // Ensure items are displayed clearly
