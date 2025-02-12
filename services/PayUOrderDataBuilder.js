@@ -7,25 +7,20 @@ class PayUOrderDataBuilder {
     console.log('Building order data:', { 
       orderNumber: orderDetails.orderNumber,
       cartItems: orderDetails.cart?.length,
-      total: orderDetails.total
+      total: orderDetails.total // Use exactly what's passed in
     });
 
     this.validateOrderData(orderDetails);
     this.validateCustomerData(customerData);
 
-    // Build products with original prices
-    const products = orderDetails.cart.map(item => {
-      const price = Math.round(parseFloat(item.price) * 100);
-      const quantity = parseInt(item.quantity) || 1;
-      
-      return {
-        name: item.name || 'Product',
-        unitPrice: price,
-        quantity: quantity
-      };
-    });
+    // Just pass through the exact price from the cart without any calculations
+    const products = orderDetails.cart.map(item => ({
+      name: item.name,
+      unitPrice: Math.round(parseFloat(item.price) * 100), // Just convert to PayU format
+      quantity: parseInt(item.quantity) || 1
+    }));
 
-    // Add shipping
+    // Add shipping as-is
     if (orderDetails.shipping) {
       products.push({
         name: 'Shipping - DPD',
@@ -37,7 +32,7 @@ class PayUOrderDataBuilder {
     const orderData = {
       merchantPosId: this.config.posId,
       currencyCode: 'PLN',
-      totalAmount: Math.round(parseFloat(orderDetails.total) * 100), // Use the final amount including discount
+      totalAmount: Math.round(parseFloat(orderDetails.total) * 100), // Use exact total passed in
       customerIp: customerIp || '127.0.0.1',
       description: `Order ${orderDetails.orderNumber}`,
       extOrderId: orderDetails.orderNumber,
@@ -74,11 +69,6 @@ class PayUOrderDataBuilder {
     if (!orderDetails?.total || isNaN(parseFloat(orderDetails.total))) {
       throw new Error('Valid total amount is required');
     }
-    orderDetails.cart.forEach(item => {
-      if (!item.name || !item.price || isNaN(parseFloat(item.price))) {
-        throw new Error(`Invalid product data for item: ${JSON.stringify(item)}`);
-      }
-    });
   }
 
   validateCustomerData(customerData) {
