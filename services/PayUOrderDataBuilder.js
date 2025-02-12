@@ -7,35 +7,24 @@ class PayUOrderDataBuilder {
     console.log('Building order data:', { 
       orderNumber: orderDetails.orderNumber,
       cartItems: orderDetails.cart?.length,
-      total: orderDetails.total,
-      discountAmount: orderDetails.discountAmount,
-      shipping: orderDetails.shipping
+      total: orderDetails.total // This is already the final amount (348 zł)
     });
 
     this.validateOrderData(orderDetails);
     this.validateCustomerData(customerData);
 
-    // Calculate discount percentage
-    const subtotal = orderDetails.cart.reduce((sum, item) => 
-      sum + (parseFloat(item.price) * (parseInt(item.quantity) || 1)), 0);
-    const discountPercent = orderDetails.discountAmount ? (orderDetails.discountAmount / subtotal) : 0;
-
-    // Build products with discounted prices
-    const products = orderDetails.cart.map(item => {
-      const originalPrice = parseFloat(item.price);
-      const discountedPrice = originalPrice * (1 - discountPercent);
-      return {
-        name: item.name || 'Product',
-        unitPrice: Math.round(discountedPrice * 100),
-        quantity: parseInt(item.quantity) || 1
-      };
-    });
+    // Build products with original prices
+    const products = orderDetails.cart.map(item => ({
+      name: item.name || 'Product',
+      unitPrice: Math.round(parseFloat(item.price) * 100), // Original prices (250.00 and 120.00)
+      quantity: parseInt(item.quantity) || 1
+    }));
 
     // Add shipping
     if (orderDetails.shipping) {
       products.push({
         name: 'Shipping - DPD',
-        unitPrice: 1500,
+        unitPrice: 1500, // 15.00 zł
         quantity: 1
       });
     }
@@ -43,7 +32,7 @@ class PayUOrderDataBuilder {
     const orderData = {
       merchantPosId: this.config.posId,
       currencyCode: 'PLN',
-      totalAmount: Math.round(parseFloat(orderDetails.total) * 100),
+      totalAmount: Math.round(parseFloat(orderDetails.total) * 100), // Will be 34800 (348.00 zł)
       customerIp: customerIp || '127.0.0.1',
       description: `Order ${orderDetails.orderNumber}`,
       extOrderId: orderDetails.orderNumber,
@@ -58,11 +47,7 @@ class PayUOrderDataBuilder {
       orderNumber: orderData.extOrderId,
       totalAmount: orderData.totalAmount,
       finalPrice: orderData.totalAmount / 100,
-      productsCount: orderData.products.length,
-      productPrices: products.map(p => ({
-        name: p.name,
-        price: p.unitPrice / 100
-      }))
+      productsCount: orderData.products.length
     });
 
     return orderData;
