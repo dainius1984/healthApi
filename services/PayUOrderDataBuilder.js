@@ -6,19 +6,22 @@ class PayUOrderDataBuilder {
   buildOrderData(orderDetails, customerData, customerIp) {
     console.log('Building order data:', { 
       orderNumber: orderDetails.orderNumber,
-      cartItems: orderDetails.cart?.length 
+      cartItems: orderDetails.cart?.length,
+      total: orderDetails.total 
     });
 
     this.validateOrderData(orderDetails);
     this.validateCustomerData(customerData);
 
     const products = this.buildProducts(orderDetails);
-    const calculatedTotal = this.calculateTotal(products);
+    
+    // Convert the provided total to PayU format (multiply by 100)
+    const totalAmount = Math.round(parseFloat(orderDetails.total) * 100);
 
     const orderData = {
       merchantPosId: this.config.posId,
       currencyCode: 'PLN',
-      totalAmount: calculatedTotal,
+      totalAmount: totalAmount, // Use the provided total (already discounted) instead of calculating
       customerIp: customerIp || '127.0.0.1',
       description: `Order ${orderDetails.orderNumber}`,
       extOrderId: orderDetails.orderNumber,
@@ -32,6 +35,7 @@ class PayUOrderDataBuilder {
     console.log('Created PayU order data:', {
       orderNumber: orderData.extOrderId,
       totalAmount: orderData.totalAmount,
+      originalAmount: this.calculateTotal(products), // Log both amounts for debugging
       productsCount: orderData.products.length
     });
 
@@ -44,6 +48,9 @@ class PayUOrderDataBuilder {
     }
     if (!orderDetails?.cart || !Array.isArray(orderDetails.cart)) {
       throw new Error('Invalid cart data');
+    }
+    if (!orderDetails?.total || isNaN(parseFloat(orderDetails.total))) {
+      throw new Error('Valid total amount is required');
     }
   }
 
