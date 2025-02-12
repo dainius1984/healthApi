@@ -24,13 +24,18 @@ class GoogleSheetsService {
       await this.init();
       const sheet = this.doc.sheetsByIndex[0];
       
-      // Debug log before adding
-      console.log('Adding row to sheets with PayU OrderId:', {
-        payuOrderId: data['PayU OrderId'],
-        orderNumber: data['Numer zamowienia']
+      // Store PayU OrderId in Numer zamowienia
+      const rowData = {
+        ...data,
+        'Numer zamowienia': data['PayU OrderId'] // Use PayU OrderId as Numer zamowienia
+      };
+
+      console.log('Adding row to sheets:', {
+        orderNumber: rowData['Numer zamowienia'],
+        status: rowData['Status']
       });
 
-      const addedRow = await sheet.addRow(data);
+      const addedRow = await sheet.addRow(rowData);
       console.log('Successfully added row to sheet');
       return addedRow;
     } catch (error) {
@@ -45,24 +50,29 @@ class GoogleSheetsService {
       const sheet = this.doc.sheetsByIndex[0];
       const rows = await sheet.getRows();
       
-      // Debug: Log all PayU OrderIds in sheet
-      console.log('All PayU OrderIds in sheet:', rows.map(row => row['PayU OrderId']));
+      console.log('Looking for order:', {
+        searchingFor: orderId,
+        totalRows: rows.length
+      });
       
       const orderRow = rows.find(row => {
         console.log('Comparing:', {
-          sheetId: row['PayU OrderId'],
-          searchId: orderId,
-          matches: row['PayU OrderId'] === orderId
+          sheetOrderNumber: row['Numer zamowienia'],
+          payuOrderId: orderId,
+          matches: row['Numer zamowienia'] === orderId
         });
-        return row['PayU OrderId'] === orderId;
+        return row['Numer zamowienia'] === orderId;
       });
 
       if (orderRow) {
-        orderRow['Status'] = status === 'PAID' ? 'Opłacone' : 
-                            status === 'CANCELED' ? 'Anulowane' : 
-                            status === 'PENDING' ? 'Oczekujące' : status;
+        const mappedStatus = 
+          status === 'PAID' ? 'Opłacone' :
+          status === 'CANCELED' ? 'Anulowane' :
+          status === 'PENDING' ? 'Oczekujące' : status;
+
+        orderRow['Status'] = mappedStatus;
         await orderRow.save();
-        console.log(`Updated order ${orderId} status to ${status}`);
+        console.log(`Updated order ${orderId} status to ${mappedStatus}`);
       } else {
         console.warn(`Order ${orderId} not found in sheet. Available columns:`, 
           Object.keys(rows[0] || {}));
