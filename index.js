@@ -3,7 +3,7 @@ const cors = require('cors');
 const session = require('express-session');
 const config = require('./config/config');
 const OrderService = require('./services/OrderService');
-const { securityService } = require('./services/PayUService');
+const PayUWebhookHandler = require('./services/PayUWebhookHandler');
 
 // Validate environment variables before starting
 config.validateEnvVars();
@@ -70,39 +70,18 @@ app.post('/api/create-payment', async (req, res) => {
   }
 });
 
-// PayU webhook handler
+// PayU webhook handler - now using the dedicated component
 app.post('/api/payu-webhook', async (req, res) => {
   try {
-    console.log('PayU webhook received:', {
-      headers: req.headers,
-      body: req.body
-    });
-
-    const signature = req.headers['openpayu-signature']?.split(';')
-      .find(part => part.startsWith('signature='))?.split('=')[1];
-
-    if (!signature) {
-      console.error('No signature found in headers');
-      return res.status(400).json({ error: 'Missing signature' });
-    }
-
-    const isValid = securityService.validateWebhookSignature(req.body, signature);
-    if (!isValid) {
-      console.error('Invalid signature');
-      return res.status(400).json({ error: 'Invalid signature' });
-    }
-
-    const { order } = req.body;
-    if (!order?.orderId || !order?.status) {
-      console.error('Invalid webhook payload:', req.body);
-      return res.status(400).json({ error: 'Invalid webhook payload' });
-    }
-
-    await OrderService.updateOrderStatus(order.orderId, order.status);
-    return res.status(200).json({ status: 'OK' });
+    await PayUWebhookHandler.handleNotification(req);
+    res.status(200).json({ status: 'SUCCESS' });
   } catch (error) {
     console.error('PayU webhook error:', error);
-    return res.status(500).json({ error: 'Webhook processing failed' });
+    res.status(500).json({ 
+      error: process.env.NODE_ENV === 'production'
+        ? 'Webhook processing failed'
+        : error.message
+    });
   }
 });
 
