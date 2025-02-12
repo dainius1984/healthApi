@@ -24,32 +24,13 @@ class GoogleSheetsService {
       await this.init();
       const sheet = this.doc.sheetsByIndex[0];
       
-      // Prepare data according to sheet columns
-      const rowData = {
-        'Numer zamowienia': data['Numer zamowienia'],
-        'Data': data['Data zamowienia'],
-        'Status': data['Status'],
-        'Suma': data['Suma'],
-        'Wysylka': data['Metoda dostawy'],
-        'Imie': data['Imie'],
-        'Nazwisko': data['Nazwisko'],
-        'Firma': data['Firma'] || '',
-        'Email': data['Email'],
-        'Telefon': data['Telefon'],
-        'Ulica': data['Ulica'],
-        'Kod pocztowy': data['Kod pocztowy'],
-        'Miasto': data['Miasto'],
-        'Uwagi': `PayU OrderId: ${data['PayU OrderId']}`, // Store PayU ID in notes
-        'Produkty': data['Produkty']
-      };
-
       console.log('Adding row to sheets:', {
-        orderNumber: rowData['Numer zamowienia'],
+        orderNumber: data['Numer zamowienia'],
         payuOrderId: data['PayU OrderId'],
-        status: rowData['Status']
+        status: data['Status']
       });
 
-      const addedRow = await sheet.addRow(rowData);
+      const addedRow = await sheet.addRow(data);
       console.log('Successfully added row to sheet');
       return addedRow;
     } catch (error) {
@@ -64,22 +45,26 @@ class GoogleSheetsService {
       const sheet = this.doc.sheetsByIndex[0];
       const rows = await sheet.getRows();
       
-      console.log('Looking for order:', {
+      console.log('Looking for PayU order:', {
         searchingFor: orderId,
         totalRows: rows.length
       });
       
-      // Search in Uwagi field for PayU OrderId
       const orderRow = rows.find(row => {
+        // Check both Uwagi and PayU OrderId columns for matching orderId
         const uwagi = row['Uwagi'] || '';
-        const hasPayUId = uwagi.includes(orderId);
-        console.log('Comparing:', {
+        const payuOrderId = row['PayU OrderId'] || '';
+        const matches = uwagi.includes(orderId) || payuOrderId === orderId;
+        
+        console.log('Comparing row:', {
           sheetOrderNumber: row['Numer zamowienia'],
+          payuOrderId: payuOrderId,
           uwagi: uwagi,
-          payuOrderId: orderId,
-          matches: hasPayUId
+          searchingFor: orderId,
+          matches: matches
         });
-        return hasPayUId;
+        
+        return matches;
       });
 
       if (orderRow) {

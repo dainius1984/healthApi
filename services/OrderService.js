@@ -131,12 +131,14 @@ class OrderService {
         'Kod pocztowy': customerData['Kod pocztowy'],
         'Miasto': customerData.Miasto,
         'Status': 'Oczekujące',
-        'Suma': `${originalTotal.toFixed(2)} PLN`, // Original total before discount
+        'Suma': `${originalTotal.toFixed(2)} PLN`,
         'Rabat': discountAmount ? `${discountAmount.toFixed(2)} PLN` : '0.00 PLN',
-        'Suma po rabacie': `${finalTotal.toFixed(2)} PLN`, // Total after discount
+        'Suma po rabacie': `${finalTotal.toFixed(2)} PLN`,
         'Metoda dostawy': orderData.shipping || 'DPD',
         'Kurier': orderData.shipping || 'DPD',
-        'Koszt dostawy': '15.00 PLN'
+        'Koszt dostawy': '15.00 PLN',
+        'PayU OrderId': payuResponse.orderId, // Store PayU's orderId
+        'Uwagi': `PayU OrderId: ${payuResponse.orderId}` // Store PayU's orderId (NOT the orderNumber)
       };
 
       // Pass the final total (already discounted) to PayU
