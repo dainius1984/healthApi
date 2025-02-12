@@ -7,24 +7,29 @@ class PayUOrderDataBuilder {
     console.log('Building order data:', { 
       orderNumber: orderDetails.orderNumber,
       cartItems: orderDetails.cart?.length,
-      total: orderDetails.total // This is already the final amount (348 zł)
+      total: orderDetails.total
     });
 
     this.validateOrderData(orderDetails);
     this.validateCustomerData(customerData);
 
     // Build products with original prices
-    const products = orderDetails.cart.map(item => ({
-      name: item.name || 'Product',
-      unitPrice: Math.round(parseFloat(item.price) * 100), // Original prices (250.00 and 120.00)
-      quantity: parseInt(item.quantity) || 1
-    }));
+    const products = orderDetails.cart.map(item => {
+      const price = Math.round(parseFloat(item.price) * 100);
+      const quantity = parseInt(item.quantity) || 1;
+      
+      return {
+        name: item.name || 'Product',
+        unitPrice: price,
+        quantity: quantity
+      };
+    });
 
     // Add shipping
     if (orderDetails.shipping) {
       products.push({
         name: 'Shipping - DPD',
-        unitPrice: 1500, // 15.00 zł
+        unitPrice: 1500,
         quantity: 1
       });
     }
@@ -32,11 +37,17 @@ class PayUOrderDataBuilder {
     const orderData = {
       merchantPosId: this.config.posId,
       currencyCode: 'PLN',
-      totalAmount: Math.round(parseFloat(orderDetails.total) * 100), // Will be 34800 (348.00 zł)
+      totalAmount: Math.round(parseFloat(orderDetails.total) * 100), // Use the final amount including discount
       customerIp: customerIp || '127.0.0.1',
       description: `Order ${orderDetails.orderNumber}`,
       extOrderId: orderDetails.orderNumber,
-      buyer: this.buildBuyerData(customerData),
+      buyer: {
+        email: customerData.Email,
+        phone: customerData.Telefon,
+        firstName: customerData.Imie,
+        lastName: customerData.Nazwisko,
+        language: 'pl'
+      },
       products: products,
       notifyUrl: `${process.env.BASE_URL}/api/payu-webhook`,
       continueUrl: `${process.env.FRONTEND_URL}/order-confirmation`,
@@ -63,16 +74,20 @@ class PayUOrderDataBuilder {
     if (!orderDetails?.total || isNaN(parseFloat(orderDetails.total))) {
       throw new Error('Valid total amount is required');
     }
+    orderDetails.cart.forEach(item => {
+      if (!item.name || !item.price || isNaN(parseFloat(item.price))) {
+        throw new Error(`Invalid product data for item: ${JSON.stringify(item)}`);
+      }
+    });
   }
 
-  buildBuyerData(customerData) {
-    return {
-      email: customerData.Email,
-      phone: customerData.Telefon,
-      firstName: customerData.Imie,
-      lastName: customerData.Nazwisko,
-      language: 'pl'
-    };
+  validateCustomerData(customerData) {
+    const requiredFields = ['Email', 'Telefon', 'Imie', 'Nazwisko'];
+    const missingFields = requiredFields.filter(field => !customerData?.[field]);
+    
+    if (missingFields.length > 0) {
+      throw new Error(`Missing required customer data: ${missingFields.join(', ')}`);
+    }
   }
 }
 
