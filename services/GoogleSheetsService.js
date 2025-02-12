@@ -24,14 +24,28 @@ class GoogleSheetsService {
       await this.init();
       const sheet = this.doc.sheetsByIndex[0];
       
-      // Store PayU OrderId in Numer zamowienia
+      // Prepare data according to sheet columns
       const rowData = {
-        ...data,
-        'Numer zamowienia': data['PayU OrderId'] // Use PayU OrderId as Numer zamowienia
+        'Numer zamowienia': data['Numer zamowienia'],
+        'Data': data['Data zamowienia'],
+        'Status': data['Status'],
+        'Suma': data['Suma'],
+        'Wysylka': data['Metoda dostawy'],
+        'Imie': data['Imie'],
+        'Nazwisko': data['Nazwisko'],
+        'Firma': data['Firma'] || '',
+        'Email': data['Email'],
+        'Telefon': data['Telefon'],
+        'Ulica': data['Ulica'],
+        'Kod pocztowy': data['Kod pocztowy'],
+        'Miasto': data['Miasto'],
+        'Uwagi': `PayU OrderId: ${data['PayU OrderId']}`, // Store PayU ID in notes
+        'Produkty': data['Produkty']
       };
 
       console.log('Adding row to sheets:', {
         orderNumber: rowData['Numer zamowienia'],
+        payuOrderId: data['PayU OrderId'],
         status: rowData['Status']
       });
 
@@ -55,13 +69,17 @@ class GoogleSheetsService {
         totalRows: rows.length
       });
       
+      // Search in Uwagi field for PayU OrderId
       const orderRow = rows.find(row => {
+        const uwagi = row['Uwagi'] || '';
+        const hasPayUId = uwagi.includes(orderId);
         console.log('Comparing:', {
           sheetOrderNumber: row['Numer zamowienia'],
+          uwagi: uwagi,
           payuOrderId: orderId,
-          matches: row['Numer zamowienia'] === orderId
+          matches: hasPayUId
         });
-        return row['Numer zamowienia'] === orderId;
+        return hasPayUId;
       });
 
       if (orderRow) {
