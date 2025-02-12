@@ -3,31 +3,25 @@ const GoogleSheetsService = require('./GoogleSheetsService');
 const { orderService: PayUOrderService, orderDataBuilder } = require('./PayUService');
 
 class OrderService {
-  _sanitizeTotal(total, discountAmount = 0) {
-    let parsedTotal;
-    
+  _sanitizeTotal(total) {
     if (typeof total === 'number') {
-      parsedTotal = total;
-    } else if (typeof total === 'string') {
+      return total;
+    }
+    
+    if (typeof total === 'string') {
       const cleanTotal = total.replace(/[^\d.-]/g, '');
-      parsedTotal = parseFloat(cleanTotal);
+      const parsedTotal = parseFloat(cleanTotal);
       
       if (isNaN(parsedTotal)) {
         console.error('Invalid total format:', total);
         return 0;
       }
-    } else {
-      console.error('Invalid total format:', total);
-      return 0;
+      
+      return Number(parsedTotal.toFixed(2));
     }
     
-    // Apply discount if present
-    if (discountAmount > 0) {
-      parsedTotal = Math.max(0, parsedTotal - discountAmount);
-    }
-    
-    // Return with 2 decimal places precision
-    return Number(parsedTotal.toFixed(2));
+    console.error('Invalid total format:', total);
+    return 0;
   }
 
   _formatDateForSheets(dateString) {
@@ -97,6 +91,7 @@ class OrderService {
     console.log('Processing order data:', {
       orderItems: orderData.items,
       cart: orderData.cart,
+      subtotal: orderData.subtotal,
       total: orderData.total,
       discountAmount: orderData.discountAmount,
       discountApplied: orderData.discountApplied
@@ -107,14 +102,12 @@ class OrderService {
       const orderNumber = orderData.orderNumber || 
         `ORD-${orderDate.toISOString().split('T')[0]}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
-      // Parse original total and discount
-      const originalTotal = this._sanitizeTotal(orderData.total);
+      // Use the original amounts from orderData - they're already calculated correctly
+      const originalTotal = this._sanitizeTotal(orderData.subtotal);
       const discountAmount = this._sanitizeTotal(orderData.discountAmount || 0);
+      const finalTotal = this._sanitizeTotal(orderData.total); // Already includes discount
       
-      // Calculate final total with discount applied
-      const finalTotal = this._sanitizeTotal(orderData.total, discountAmount);
-      
-      console.log('Calculated totals:', {
+      console.log('Order totals:', {
         originalTotal,
         discountAmount,
         finalTotal
@@ -146,12 +139,12 @@ class OrderService {
         'Koszt dostawy': '15.00 PLN'
       };
 
-      // Build PayU order data with discounted total
+      // Pass the final total (already discounted) to PayU
       const payuOrderData = orderDataBuilder.buildOrderData(
         {
           orderNumber,
           cart: orderData.cart,
-          total: finalTotal, // Use the discounted total for payment
+          total: finalTotal, // Already includes discount and shipping
           shipping: orderData.shipping
         },
         customerData,
