@@ -7,27 +7,48 @@ class PayUOrderDataBuilder {
     console.log('Building order data:', { 
       orderNumber: orderDetails.orderNumber,
       cartItems: orderDetails.cart?.length,
-      total: orderDetails.total, // This should be 348.00
+      total: orderDetails.total,
+      discountAmount: orderDetails.discountAmount,
       shipping: orderDetails.shipping
     });
 
     this.validateOrderData(orderDetails);
     this.validateCustomerData(customerData);
 
-    const products = this.buildProducts(orderDetails);
-    
-    // Convert the final total (including discount and shipping) to PayU format
-    const totalAmount = Math.round(parseFloat(orderDetails.total) * 100);
+    // Calculate discount percentage
+    const subtotal = orderDetails.cart.reduce((sum, item) => 
+      sum + (parseFloat(item.price) * (parseInt(item.quantity) || 1)), 0);
+    const discountPercent = orderDetails.discountAmount ? (orderDetails.discountAmount / subtotal) : 0;
+
+    // Build products with discounted prices
+    const products = orderDetails.cart.map(item => {
+      const originalPrice = parseFloat(item.price);
+      const discountedPrice = originalPrice * (1 - discountPercent);
+      return {
+        name: item.name || 'Product',
+        unitPrice: Math.round(discountedPrice * 100),
+        quantity: parseInt(item.quantity) || 1
+      };
+    });
+
+    // Add shipping
+    if (orderDetails.shipping) {
+      products.push({
+        name: 'Shipping - DPD',
+        unitPrice: 1500,
+        quantity: 1
+      });
+    }
 
     const orderData = {
       merchantPosId: this.config.posId,
       currencyCode: 'PLN',
-      totalAmount: totalAmount, // This will be 34800 (348.00 zł)
+      totalAmount: Math.round(parseFloat(orderDetails.total) * 100),
       customerIp: customerIp || '127.0.0.1',
       description: `Order ${orderDetails.orderNumber}`,
       extOrderId: orderDetails.orderNumber,
       buyer: this.buildBuyerData(customerData),
-      products: this.buildProducts(orderDetails), // Keep original prices for reference
+      products: products,
       notifyUrl: `${process.env.BASE_URL}/api/payu-webhook`,
       continueUrl: `${process.env.FRONTEND_URL}/order-confirmation`,
       validityTime: 3600
@@ -36,8 +57,12 @@ class PayUOrderDataBuilder {
     console.log('Created PayU order data:', {
       orderNumber: orderData.extOrderId,
       totalAmount: orderData.totalAmount,
-      finalPrice: orderData.totalAmount / 100, // Log in PLN for clarity
-      productsCount: orderData.products.length
+      finalPrice: orderData.totalAmount / 100,
+      productsCount: orderData.products.length,
+      productPrices: products.map(p => ({
+        name: p.name,
+        price: p.unitPrice / 100
+      }))
     });
 
     return orderData;
@@ -53,35 +78,6 @@ class PayUOrderDataBuilder {
     if (!orderDetails?.total || isNaN(parseFloat(orderDetails.total))) {
       throw new Error('Valid total amount is required');
     }
-  }
-
-  buildProducts(orderDetails) {
-    // List products with their original prices (before discount)
-    const products = orderDetails.cart.map(this.buildProductData);
-    
-    // Add shipping as a separate product
-    products.push({
-      name: 'Shipping - DPD',
-      unitPrice: 1500, // 15.00 zł in PayU format
-      quantity: 1
-    });
-    
-    return products;
-  }
-
-  buildProductData(item) {
-    const price = Math.round(parseFloat(item.price) * 100);
-    const quantity = parseInt(item.quantity) || 1;
-    
-    if (isNaN(price) || price <= 0) {
-      throw new Error(`Invalid price for product: ${item.name}`);
-    }
-
-    return {
-      name: item.name || 'Product',
-      unitPrice: price,
-      quantity: quantity
-    };
   }
 
   buildBuyerData(customerData) {
