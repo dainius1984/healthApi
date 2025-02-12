@@ -1,7 +1,24 @@
-// services/googleSheets.service.js
 const { GoogleSpreadsheet } = require('google-spreadsheet');
 
 class GoogleSheetsService {
+  constructor() {
+    this.doc = new GoogleSpreadsheet(process.env.SPREADSHEET_ID);
+  }
+
+  async init() {
+    const formattedKey = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n');
+    if (!formattedKey || !process.env.GOOGLE_CLIENT_EMAIL) {
+      throw new Error('Google Sheets credentials are missing');
+    }
+
+    await this.doc.useServiceAccountAuth({
+      client_email: process.env.GOOGLE_CLIENT_EMAIL,
+      private_key: formattedKey
+    });
+
+    await this.doc.loadInfo();
+  }
+
   async addRow(data) {
     try {
       await this.init();
