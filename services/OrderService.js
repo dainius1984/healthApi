@@ -3,18 +3,31 @@ const GoogleSheetsService = require('./GoogleSheetsService');
 const { orderService: PayUOrderService, orderDataBuilder } = require('./PayUService');
 
 class OrderService {
-  _sanitizeTotal(total) {
-    if (typeof total === 'number') return total;
+  _sanitizeTotal(total, discountAmount = 0) {
+    let parsedTotal;
     
-    if (typeof total === 'string') {
+    if (typeof total === 'number') {
+      parsedTotal = total;
+    } else if (typeof total === 'string') {
       const cleanTotal = total.replace(/[^\d.-]/g, '');
-      const parsedTotal = parseFloat(cleanTotal);
+      parsedTotal = parseFloat(cleanTotal);
       
-      if (!isNaN(parsedTotal)) return parsedTotal;
+      if (isNaN(parsedTotal)) {
+        console.error('Invalid total format:', total);
+        return 0;
+      }
+    } else {
+      console.error('Invalid total format:', total);
+      return 0;
     }
     
-    console.error('Invalid total format:', total);
-    return 0;
+    // Apply discount if present
+    if (discountAmount > 0) {
+      parsedTotal = Math.max(0, parsedTotal - discountAmount);
+    }
+    
+    // Return with 2 decimal places precision
+    return Number(parsedTotal.toFixed(2));
   }
 
   _formatDateForSheets(dateString) {
@@ -83,7 +96,10 @@ class OrderService {
   async createOrder(orderData, customerData, isAuthenticated, userId, ip) {
     console.log('Processing order data:', {
       orderItems: orderData.items,
-      cart: orderData.cart
+      cart: orderData.cart,
+      total: orderData.total,
+      discountAmount: orderData.discountAmount,
+      discountApplied: orderData.discountApplied
     });
     
     try {
@@ -91,7 +107,13 @@ class OrderService {
       const orderNumber = orderData.orderNumber || 
         `ORD-${orderDate.toISOString().split('T')[0]}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
-      const sanitizedTotal = this._sanitizeTotal(orderData.total);
+      // Calculate the total with discount applied
+      const sanitizedTotal = this._sanitizeTotal(orderData.total, orderData.discountAmount);
+      console.log('Calculated total after discount:', {
+        originalTotal: orderData.total,
+        discountAmount: orderData.discountAmount,
+        finalTotal: sanitizedTotal
+      });
       
       // Try to get items from either items or cart property
       const items = orderData.items || orderData.cart;
@@ -111,27 +133,43 @@ class OrderService {
         'Kod pocztowy': customerData['Kod pocztowy'],
         'Miasto': customerData.Miasto,
         'Status': 'Oczekujące',
-        'Suma': `${sanitizedTotal.toFixed(2)} PLN`,
+        'Suma': `${orderData.total.toFixed(2)} PLN`, // Original total before discount
+        'Rabat': orderData.discountAmount ? `${orderData.discountAmount.toFixed(2)} PLN` : '0.00 PLN',
+        'Suma po rabacie': `${sanitizedTotal.toFixed(2)} PLN`, // Total after discount
         'Metoda dostawy': orderData.shipping || 'DPD',
         'Kurier': orderData.shipping || 'DPD',
         'Koszt dostawy': '15.00 PLN'
       };
 
+      // Build PayU order data with discounted total
       const payuOrderData = orderDataBuilder.buildOrderData(
         {
           orderNumber,
           cart: orderData.cart,
-          total: sanitizedTotal,
+          total: sanitizedTotal, // Use the discounted total for payment
           shipping: orderData.shipping
         },
         customerData,
         ip || '127.0.0.1'
       );
 
+      console.log('Sending order to PayU:', {
+        orderNumber,
+        total: sanitizedTotal,
+        discountApplied: !!orderData.discountAmount
+      });
+
       const payuResponse = await PayUOrderService.createOrder(payuOrderData);
 
       if (isAuthenticated && userId) {
-        console.log('Attempting to save order to Appwrite:', { userId, orderNumber });
+        console.log('Attempting to save order to Appwrite:', { 
+          userId, 
+          orderNumber,
+          originalTotal: orderData.total,
+          discountAmount: orderData.discountAmount,
+          finalTotal: sanitizedTotal
+        });
+        
         try {
           const appwriteOrderData = {
             userId,
@@ -139,12 +177,15 @@ class OrderService {
             payuOrderId: payuResponse.orderId,
             status: 'pending',
             total: sanitizedTotal,
+            subtotal: orderData.total,
+            discountAmount: orderData.discountAmount || 0,
             items: JSON.stringify(formattedItems),
             customerData,
             shippingDetails: {
               method: orderData.shipping,
               cost: orderData.shippingCost
             },
+            discountApplied: !!orderData.discountAmount,
             createdAt: new Date().toISOString()
           };
 
@@ -165,7 +206,9 @@ class OrderService {
         success: true,
         redirectUrl: payuResponse.redirectUrl,
         orderId: payuResponse.orderId,
-        orderNumber
+        orderNumber,
+        total: sanitizedTotal,
+        discountApplied: !!orderData.discountAmount
       };
     } catch (error) {
       console.error('Order creation error:', error);
