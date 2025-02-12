@@ -33,20 +33,47 @@ class OrderService {
     }
   }
 
-  // New helper method to format items
   _formatOrderItems(items) {
     try {
-      // If items is already a string, try to parse it
-      const itemsArray = typeof items === 'string' ? JSON.parse(items) : items;
-      
-      // Ensure each item has the required properties
-      return itemsArray.map(item => ({
-        id: item.id || 0,
-        n: item.name || item.n || '',
-        p: item.price || item.p || 0,
-        q: item.quantity || item.q || 1,
-        image: item.image || `/img/products/${item.id}.png`
-      }));
+      // Handle string format: "ProductName (Qx po Price zł)"
+      if (typeof items === 'string') {
+        console.log('Processing string items:', items);
+        const match = items.match(/(.*?)\s*\((\d+)x po\s*([\d.]+)/);
+        if (match) {
+          const [_, name, quantity, price] = match;
+          const productId = name.toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/(^-|-$)/g, '');
+          
+          return [{
+            id: productId,
+            n: name.trim(),
+            p: parseFloat(price),
+            q: parseInt(quantity),
+            image: `/img/products/${productId}.png`
+          }];
+        }
+      }
+
+      // Handle array format
+      if (Array.isArray(items)) {
+        return items.map(item => ({
+          id: item.id || item.productId || 0,
+          n: item.name || item.n || '',
+          p: parseFloat(item.price || item.p || 0),
+          q: parseInt(item.quantity || item.q || 1),
+          image: item.image || `/img/products/${item.id}.png`
+        }));
+      }
+
+      // Handle cart object format
+      if (items?.cart && Array.isArray(items.cart)) {
+        return this._formatOrderItems(items.cart);
+      }
+
+      // If we can't parse the items, log and return empty array
+      console.error('Unable to parse order items:', items);
+      return [];
     } catch (error) {
       console.error('Error formatting order items:', error);
       return [];
@@ -54,11 +81,9 @@ class OrderService {
   }
 
   async createOrder(orderData, customerData, isAuthenticated, userId, ip) {
-    console.log('Received in OrderService:', {
-        orderData,
-        customerData,
-        isAuthenticated,
-        userId
+    console.log('Processing order data:', {
+      orderItems: orderData.items,
+      cart: orderData.cart
     });
     
     try {
@@ -68,8 +93,11 @@ class OrderService {
 
       const sanitizedTotal = this._sanitizeTotal(orderData.total);
       
-      // Format items consistently for both storage methods
-      const formattedItems = this._formatOrderItems(orderData.items);
+      // Try to get items from either items or cart property
+      const items = orderData.items || orderData.cart;
+      const formattedItems = this._formatOrderItems(items);
+      
+      console.log('Formatted items:', formattedItems);
 
       const sheetData = {
         'Numer zamowienia': `="${orderNumber}"`,
@@ -111,7 +139,7 @@ class OrderService {
             payuOrderId: payuResponse.orderId,
             status: 'pending',
             total: sanitizedTotal,
-            items: JSON.stringify(formattedItems), // Store formatted items as JSON string
+            items: JSON.stringify(formattedItems),
             customerData,
             shippingDetails: {
               method: orderData.shipping,
@@ -122,6 +150,7 @@ class OrderService {
 
           await AppwriteService.storeOrder(appwriteOrderData);
         } catch (error) {
+          console.error('Appwrite storage failed, falling back to Sheets:', error);
           sheetData['PayU OrderId'] = payuResponse.orderId;
           await GoogleSheetsService.addRow(sheetData);
           console.log('Order fallback to Google Sheets:', orderNumber);
