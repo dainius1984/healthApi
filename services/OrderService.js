@@ -107,12 +107,17 @@ class OrderService {
       const orderNumber = orderData.orderNumber || 
         `ORD-${orderDate.toISOString().split('T')[0]}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
-      // Calculate the total with discount applied
-      const sanitizedTotal = this._sanitizeTotal(orderData.total, orderData.discountAmount);
-      console.log('Calculated total after discount:', {
-        originalTotal: orderData.total,
-        discountAmount: orderData.discountAmount,
-        finalTotal: sanitizedTotal
+      // Parse original total and discount
+      const originalTotal = this._sanitizeTotal(orderData.total);
+      const discountAmount = this._sanitizeTotal(orderData.discountAmount || 0);
+      
+      // Calculate final total with discount applied
+      const finalTotal = this._sanitizeTotal(orderData.total, discountAmount);
+      
+      console.log('Calculated totals:', {
+        originalTotal,
+        discountAmount,
+        finalTotal
       });
       
       // Try to get items from either items or cart property
@@ -133,9 +138,9 @@ class OrderService {
         'Kod pocztowy': customerData['Kod pocztowy'],
         'Miasto': customerData.Miasto,
         'Status': 'Oczekujące',
-        'Suma': `${orderData.total.toFixed(2)} PLN`, // Original total before discount
-        'Rabat': orderData.discountAmount ? `${orderData.discountAmount.toFixed(2)} PLN` : '0.00 PLN',
-        'Suma po rabacie': `${sanitizedTotal.toFixed(2)} PLN`, // Total after discount
+        'Suma': `${originalTotal.toFixed(2)} PLN`, // Original total before discount
+        'Rabat': discountAmount ? `${discountAmount.toFixed(2)} PLN` : '0.00 PLN',
+        'Suma po rabacie': `${finalTotal.toFixed(2)} PLN`, // Total after discount
         'Metoda dostawy': orderData.shipping || 'DPD',
         'Kurier': orderData.shipping || 'DPD',
         'Koszt dostawy': '15.00 PLN'
@@ -146,7 +151,7 @@ class OrderService {
         {
           orderNumber,
           cart: orderData.cart,
-          total: sanitizedTotal, // Use the discounted total for payment
+          total: finalTotal, // Use the discounted total for payment
           shipping: orderData.shipping
         },
         customerData,
@@ -155,8 +160,8 @@ class OrderService {
 
       console.log('Sending order to PayU:', {
         orderNumber,
-        total: sanitizedTotal,
-        discountApplied: !!orderData.discountAmount
+        total: finalTotal,
+        discountApplied: !!discountAmount
       });
 
       const payuResponse = await PayUOrderService.createOrder(payuOrderData);
@@ -165,9 +170,9 @@ class OrderService {
         console.log('Attempting to save order to Appwrite:', { 
           userId, 
           orderNumber,
-          originalTotal: orderData.total,
-          discountAmount: orderData.discountAmount,
-          finalTotal: sanitizedTotal
+          originalTotal,
+          discountAmount,
+          finalTotal
         });
         
         try {
@@ -176,16 +181,16 @@ class OrderService {
             orderNumber,
             payuOrderId: payuResponse.orderId,
             status: 'pending',
-            total: sanitizedTotal,
-            subtotal: orderData.total,
-            discountAmount: orderData.discountAmount || 0,
+            total: finalTotal,
+            subtotal: originalTotal,
+            discountAmount: discountAmount,
             items: JSON.stringify(formattedItems),
             customerData,
             shippingDetails: {
               method: orderData.shipping,
               cost: orderData.shippingCost
             },
-            discountApplied: !!orderData.discountAmount,
+            discountApplied: !!discountAmount,
             createdAt: new Date().toISOString()
           };
 
@@ -207,8 +212,8 @@ class OrderService {
         redirectUrl: payuResponse.redirectUrl,
         orderId: payuResponse.orderId,
         orderNumber,
-        total: sanitizedTotal,
-        discountApplied: !!orderData.discountAmount
+        total: finalTotal,
+        discountApplied: !!discountAmount
       };
     } catch (error) {
       console.error('Order creation error:', error);
