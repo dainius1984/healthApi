@@ -26,16 +26,18 @@ class OrderService {
   // Helper method to format date for sheets
   _formatDateForSheets(dateString) {
     try {
-      const date = new Date(dateString);
+      const date = dateString instanceof Date ? dateString : new Date(dateString);
+      if (isNaN(date.getTime())) throw new Error('Invalid date');
+      
       // Format as DD.MM.YYYY
-      return date.toLocaleDateString('pl-PL', {
+      return `="${date.toLocaleDateString('pl-PL', {
         day: '2-digit',
         month: '2-digit',
         year: 'numeric'
-      });
+      })}"`;  // Wrap in quotes for Excel/Sheets
     } catch (error) {
       console.error('Date formatting error:', error);
-      return new Date().toLocaleDateString('pl-PL');
+      return `="${new Date().toLocaleDateString('pl-PL')}"`;
     }
   }
 
@@ -57,7 +59,7 @@ class OrderService {
       // Prepare sheet data with improved formatting and additional columns
       const sheetData = {
         'Numer zamowienia': `="${orderNumber}"`, // Wrap in Excel formula to display full number
-        'Data zamowienia': new Date().toISOString(), // Formatted date
+        'Data zamowienia': this._formatDateForSheets(orderDate), // Use formatted date
         'Email': customerData.Email,
         'Telefon': customerData.Telefon,
         'Produkty': JSON.stringify(orderData.items), // Ensure items are displayed clearly
