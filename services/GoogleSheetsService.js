@@ -38,10 +38,12 @@ class GoogleSheetsService {
       await this.init();
       const sheet = this.doc.sheetsByIndex[0];
       const rows = await sheet.getRows();
+      
+      // Changed from 'PayU OrderId' to match the column name exactly
       const orderRow = rows.find(row => row['PayU OrderId'] === orderId);
 
       if (orderRow) {
-        orderRow['Status płatności'] = status;
+        orderRow['Status'] = status === 'PAID' ? 'Opłacone' : status;
         await orderRow.save();
         console.log(`Updated order ${orderId} status to ${status}`);
       } else {
@@ -52,6 +54,6 @@ class GoogleSheetsService {
       throw new Error(`Failed to update order status: ${error.message}`);
     }
   }
-} 
+}
 
 module.exports = new GoogleSheetsService();
