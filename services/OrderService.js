@@ -88,37 +88,40 @@ class OrderService {
   }
 
   async createOrder(orderData, customerData, isAuthenticated, userId, ip) {
-    console.log('Processing order data:', {
-      orderItems: orderData.items,
-      cart: orderData.cart,
-      subtotal: orderData.subtotal,
-      total: orderData.total,
-      discountAmount: orderData.discountAmount,
-      discountApplied: orderData.discountApplied
-    });
-    
     try {
       const orderDate = new Date();
       const orderNumber = orderData.orderNumber || 
         `ORD-${orderDate.toISOString().split('T')[0]}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-
-      // Use the original amounts from orderData - they're already calculated correctly
+  
+      // Calculate totals
       const originalTotal = this._sanitizeTotal(orderData.subtotal);
       const discountAmount = this._sanitizeTotal(orderData.discountAmount || 0);
-      const finalTotal = this._sanitizeTotal(orderData.total); // Already includes discount
+      const finalTotal = this._sanitizeTotal(orderData.total);
       
-      console.log('Order totals:', {
-        originalTotal,
-        discountAmount,
-        finalTotal
-      });
-      
-      // Try to get items from either items or cart property
       const items = orderData.items || orderData.cart;
       const formattedItems = this._formatOrderItems(items);
-      
-      console.log('Formatted items:', formattedItems);
-
+  
+      // First create PayU order
+      const payuOrderData = orderDataBuilder.buildOrderData(
+        {
+          orderNumber,
+          cart: orderData.cart,
+          total: finalTotal,
+          shipping: orderData.shipping
+        },
+        customerData,
+        ip || '127.0.0.1'
+      );
+  
+      console.log('Sending order to PayU:', {
+        orderNumber,
+        total: finalTotal,
+        discountApplied: !!discountAmount
+      });
+  
+      const payuResponse = await PayUOrderService.createOrder(payuOrderData);
+  
+      // Then create sheet data with PayU response
       const sheetData = {
         'Numer zamowienia': `="${orderNumber}"`,
         'Data zamowienia': this._formatDateForSheets(orderDate),
@@ -137,39 +140,10 @@ class OrderService {
         'Metoda dostawy': orderData.shipping || 'DPD',
         'Kurier': orderData.shipping || 'DPD',
         'Koszt dostawy': '15.00 PLN',
-        'PayU OrderId': payuResponse.orderId, // Store PayU's orderId
-        'Uwagi': `PayU OrderId: ${payuResponse.orderId}` // Store PayU's orderId (NOT the orderNumber)
+        'Uwagi': `PayU OrderId: ${payuResponse.orderId}`
       };
-
-      // Pass the final total (already discounted) to PayU
-      const payuOrderData = orderDataBuilder.buildOrderData(
-        {
-          orderNumber,
-          cart: orderData.cart,
-          total: finalTotal, // Already includes discount and shipping
-          shipping: orderData.shipping
-        },
-        customerData,
-        ip || '127.0.0.1'
-      );
-
-      console.log('Sending order to PayU:', {
-        orderNumber,
-        total: finalTotal,
-        discountApplied: !!discountAmount
-      });
-
-      const payuResponse = await PayUOrderService.createOrder(payuOrderData);
-
+  
       if (isAuthenticated && userId) {
-        console.log('Attempting to save order to Appwrite:', { 
-          userId, 
-          orderNumber,
-          originalTotal,
-          discountAmount,
-          finalTotal
-        });
-        
         try {
           const appwriteOrderData = {
             userId,
@@ -188,20 +162,17 @@ class OrderService {
             discountApplied: !!discountAmount,
             createdAt: new Date().toISOString()
           };
-
+  
           await AppwriteService.storeOrder(appwriteOrderData);
         } catch (error) {
           console.error('Appwrite storage failed, falling back to Sheets:', error);
-          sheetData['PayU OrderId'] = payuResponse.orderId;
           await GoogleSheetsService.addRow(sheetData);
-          console.log('Order fallback to Google Sheets:', orderNumber);
         }
       } else {
         console.log('Saving order to Google Sheets (guest user)');
-        sheetData['PayU OrderId'] = payuResponse.orderId;
         await GoogleSheetsService.addRow(sheetData);
       }
-
+  
       return {
         success: true,
         redirectUrl: payuResponse.redirectUrl,
