@@ -26,7 +26,7 @@ class GoogleSheetsService {
       
       console.log('Adding row to sheets:', {
         orderNumber: data['Numer zamowienia'],
-        payuOrderId: data['PayU OrderId'],
+        uwagi: data['Uwagi'],
         status: data['Status']
       });
 
@@ -51,14 +51,11 @@ class GoogleSheetsService {
       });
       
       const orderRow = rows.find(row => {
-        // Check both Uwagi and PayU OrderId columns for matching orderId
         const uwagi = row['Uwagi'] || '';
-        const payuOrderId = row['PayU OrderId'] || '';
-        const matches = uwagi.includes(orderId) || payuOrderId === orderId;
+        const matches = uwagi.includes(orderId);
         
         console.log('Comparing row:', {
           sheetOrderNumber: row['Numer zamowienia'],
-          payuOrderId: payuOrderId,
           uwagi: uwagi,
           searchingFor: orderId,
           matches: matches

@@ -42,7 +42,6 @@ class OrderService {
 
   _formatOrderItems(items) {
     try {
-      // Handle string format: "ProductName (Qx po Price zł)"
       if (typeof items === 'string') {
         console.log('Processing string items:', items);
         const match = items.match(/(.*?)\s*\((\d+)x po\s*([\d.]+)/);
@@ -62,7 +61,6 @@ class OrderService {
         }
       }
 
-      // Handle array format
       if (Array.isArray(items)) {
         return items.map(item => ({
           id: item.id || item.productId || 0,
@@ -73,12 +71,10 @@ class OrderService {
         }));
       }
 
-      // Handle cart object format
       if (items?.cart && Array.isArray(items.cart)) {
         return this._formatOrderItems(items.cart);
       }
 
-      // If we can't parse the items, log and return empty array
       console.error('Unable to parse order items:', items);
       return [];
     } catch (error) {
@@ -88,19 +84,27 @@ class OrderService {
   }
 
   async createOrder(orderData, customerData, isAuthenticated, userId, ip) {
+    console.log('Processing order data:', {
+      orderItems: orderData.items,
+      cart: orderData.cart,
+      subtotal: orderData.subtotal,
+      total: orderData.total,
+      discountAmount: orderData.discountAmount,
+      discountApplied: orderData.discountApplied
+    });
+    
     try {
       const orderDate = new Date();
       const orderNumber = orderData.orderNumber || 
         `ORD-${orderDate.toISOString().split('T')[0]}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-  
-      // Calculate totals
+
       const originalTotal = this._sanitizeTotal(orderData.subtotal);
       const discountAmount = this._sanitizeTotal(orderData.discountAmount || 0);
       const finalTotal = this._sanitizeTotal(orderData.total);
       
       const items = orderData.items || orderData.cart;
       const formattedItems = this._formatOrderItems(items);
-  
+
       // First create PayU order
       const payuOrderData = orderDataBuilder.buildOrderData(
         {
@@ -112,15 +116,20 @@ class OrderService {
         customerData,
         ip || '127.0.0.1'
       );
-  
+
       console.log('Sending order to PayU:', {
         orderNumber,
         total: finalTotal,
         discountApplied: !!discountAmount
       });
-  
+
       const payuResponse = await PayUOrderService.createOrder(payuOrderData);
-  
+      
+      console.log('PayU Response received:', {
+        orderId: payuResponse.orderId,
+        status: payuResponse.status
+      });
+
       // Then create sheet data with PayU response
       const sheetData = {
         'Numer zamowienia': `="${orderNumber}"`,
@@ -140,9 +149,9 @@ class OrderService {
         'Metoda dostawy': orderData.shipping || 'DPD',
         'Kurier': orderData.shipping || 'DPD',
         'Koszt dostawy': '15.00 PLN',
-        'Uwagi': `PayU OrderId: ${payuResponse.orderId}`
+        'Uwagi': `PayU ID: ${payuResponse.orderId}` // Store actual PayU ID here
       };
-  
+
       if (isAuthenticated && userId) {
         try {
           const appwriteOrderData = {
@@ -162,7 +171,7 @@ class OrderService {
             discountApplied: !!discountAmount,
             createdAt: new Date().toISOString()
           };
-  
+
           await AppwriteService.storeOrder(appwriteOrderData);
         } catch (error) {
           console.error('Appwrite storage failed, falling back to Sheets:', error);
@@ -172,7 +181,7 @@ class OrderService {
         console.log('Saving order to Google Sheets (guest user)');
         await GoogleSheetsService.addRow(sheetData);
       }
-  
+
       return {
         success: true,
         redirectUrl: payuResponse.redirectUrl,
