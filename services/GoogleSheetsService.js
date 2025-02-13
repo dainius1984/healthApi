@@ -26,7 +26,6 @@ class GoogleSheetsService {
       
       console.log('Adding row to sheets:', {
         orderNumber: data['Numer zamowienia'],
-        uwagi: data['Uwagi'],
         status: data['Status']
       });
 
@@ -39,26 +38,30 @@ class GoogleSheetsService {
     }
   }
 
-  async updateOrderStatus(orderId, status) {
+  async updateOrderStatus(orderId, status, extOrderId) {
     try {
       await this.init();
       const sheet = this.doc.sheetsByIndex[0];
       const rows = await sheet.getRows();
       
-      console.log('Looking for PayU order:', {
-        searchingFor: orderId,
+      // For completed status, look for order by extOrderId
+      const isCompleted = status === 'COMPLETED';
+      console.log('Looking for order:', {
+        status,
+        orderToFind: isCompleted ? extOrderId : orderId,
+        searchType: isCompleted ? 'orderNumber' : 'payuId',
         totalRows: rows.length
       });
       
       const orderRow = rows.find(row => {
-        const uwagi = row['Uwagi'] || '';
-        const matches = uwagi.includes(orderId);
+        // Remove quotes and equals sign from sheet order number
+        const sheetOrderNumber = row['Numer zamowienia']?.replace(/[="]/g, '');
+        const matches = status === 'COMPLETED' && sheetOrderNumber === extOrderId;
         
         console.log('Comparing row:', {
-          sheetOrderNumber: row['Numer zamowienia'],
-          uwagi: uwagi,
-          searchingFor: orderId,
-          matches: matches
+          sheetOrderNumber,
+          searchingFor: isCompleted ? extOrderId : orderId,
+          matches
         });
         
         return matches;
@@ -66,16 +69,16 @@ class GoogleSheetsService {
 
       if (orderRow) {
         const mappedStatus = 
-          status === 'PAID' ? 'Opłacone' :
+          status === 'COMPLETED' ? 'Opłacone' :
           status === 'CANCELED' ? 'Anulowane' :
           status === 'PENDING' ? 'Oczekujące' : status;
 
         orderRow['Status'] = mappedStatus;
         await orderRow.save();
-        console.log(`Updated order ${orderId} status to ${mappedStatus}`);
+        console.log(`Updated order ${isCompleted ? extOrderId : orderId} status to ${mappedStatus}`);
       } else {
-        console.warn(`Order ${orderId} not found in sheet. Available columns:`, 
-          Object.keys(rows[0] || {}));
+        console.warn(`Order not found in sheet. Searched by ${isCompleted ? 'orderNumber' : 'payuId'}:`, 
+          isCompleted ? extOrderId : orderId);
       }
     } catch (error) {
       console.error('Update order status error:', error);

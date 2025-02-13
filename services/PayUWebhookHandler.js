@@ -24,7 +24,7 @@ class PayUWebhookHandler {
 
       // Extract order details
       const order = req.body.order;
-      if (!order?.orderId || !order?.status) {
+      if (!order?.orderId || !order?.status || !order?.extOrderId) {
         throw new Error('Invalid order data in notification');
       }
 
@@ -45,11 +45,12 @@ class PayUWebhookHandler {
 
       const mappedStatus = statusMapping[order.status] || order.status;
 
-      // Update order status in your database
-      await OrderService.updateOrderStatus(order.orderId, mappedStatus);
+      // Pass both orderId and extOrderId to updateOrderStatus
+      await OrderService.updateOrderStatus(order.orderId, mappedStatus, order.extOrderId);
 
       console.log('Successfully processed PayU notification:', {
         orderId: order.orderId,
+        extOrderId: order.extOrderId,
         newStatus: mappedStatus
       });
 

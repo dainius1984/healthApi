@@ -151,7 +151,7 @@ class OrderService {
         'Metoda dostawy': orderData.shipping || 'DPD',
         'Kurier': orderData.shipping || 'DPD',
         'Koszt dostawy': '15.00 PLN',
-        'Uwagi': `PayU ID: ${payuResponse.orderId}` // Now we have the actual PayU ID
+        'Uwagi': orderData.uwagi || '' // Keep Uwagi field for frontend notes
       };
 
       if (isAuthenticated && userId) {
