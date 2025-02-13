@@ -123,14 +123,16 @@ class OrderService {
         discountApplied: !!discountAmount
       });
 
+      // Get PayU response first
       const payuResponse = await PayUOrderService.createOrder(payuOrderData);
       
       console.log('PayU Response received:', {
         orderId: payuResponse.orderId,
-        status: payuResponse.status
+        status: payuResponse.status,
+        extOrderId: payuResponse.extOrderId
       });
 
-      // Then create sheet data with PayU response
+      // Now create sheet data with the actual PayU ID
       const sheetData = {
         'Numer zamowienia': `="${orderNumber}"`,
         'Data zamowienia': this._formatDateForSheets(orderDate),
@@ -149,7 +151,7 @@ class OrderService {
         'Metoda dostawy': orderData.shipping || 'DPD',
         'Kurier': orderData.shipping || 'DPD',
         'Koszt dostawy': '15.00 PLN',
-        'Uwagi': `PayU ID: ${payuResponse.orderId}` // Store actual PayU ID here
+        'Uwagi': `PayU ID: ${payuResponse.orderId}` // Now we have the actual PayU ID
       };
 
       if (isAuthenticated && userId) {
@@ -176,10 +178,12 @@ class OrderService {
         } catch (error) {
           console.error('Appwrite storage failed, falling back to Sheets:', error);
           await GoogleSheetsService.addRow(sheetData);
+          console.log('Order saved to sheets with PayU ID:', payuResponse.orderId);
         }
       } else {
         console.log('Saving order to Google Sheets (guest user)');
         await GoogleSheetsService.addRow(sheetData);
+        console.log('Guest order saved to sheets with PayU ID:', payuResponse.orderId);
       }
 
       return {
@@ -192,22 +196,6 @@ class OrderService {
       };
     } catch (error) {
       console.error('Order creation error:', error);
-      throw error;
-    }
-  }
-
-  async updateOrderStatus(orderId, status) {
-    try {
-      try {
-        const updated = await AppwriteService.updateOrderStatus(orderId, status);
-        if (updated) return;
-      } catch (error) {
-        console.error('Appwrite update failed:', error);
-      }
-
-      await GoogleSheetsService.updateOrderStatus(orderId, status);
-    } catch (error) {
-      console.error('Order status update error:', error);
       throw error;
     }
   }
