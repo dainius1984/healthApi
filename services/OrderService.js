@@ -83,6 +83,22 @@ class OrderService {
     }
   }
 
+  async updateOrderStatus(orderId, status, extOrderId) {
+    try {
+      try {
+        const updated = await AppwriteService.updateOrderStatus(orderId, status);
+        if (updated) return;
+      } catch (error) {
+        console.error('Appwrite update failed:', error);
+      }
+
+      await GoogleSheetsService.updateOrderStatus(orderId, status, extOrderId);
+    } catch (error) {
+      console.error('Order status update error:', error);
+      throw error;
+    }
+  }
+
   async createOrder(orderData, customerData, isAuthenticated, userId, ip) {
     console.log('Processing order data:', {
       orderItems: orderData.items,
