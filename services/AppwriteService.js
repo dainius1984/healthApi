@@ -54,43 +54,58 @@ class AppwriteService {
  }
 
  async updateOrderStatus(orderId, status) {
-   try {
-     console.log('AppwriteService - Attempting to update order status:', {
-       payuOrderId: orderId,
-       newStatus: status
-     });
+  try {
+    console.log('AppwriteService - Attempting to update order status:', {
+      payuOrderId: orderId,
+      newStatus: status
+    });
 
-     const documents = await this.databases.listDocuments(
-       process.env.APPWRITE_DATABASE_ID,
-       process.env.APPWRITE_ORDERS_COLLECTION_ID,
-       [
-         Query.equal('payuOrderId', orderId)
-       ]
-     );
+    // Map PayU status to our system status
+    const statusMapping = {
+      'PAID': 'opłacone',
+      'CANCELLED': 'anulowane',
+      'PENDING': 'oczekujące',
+      'REJECTED': 'odrzucone'
+    };
 
-     if (documents?.documents?.length > 0) {
-       const document = documents.documents[0];
-       
-       await this.databases.updateDocument(
-         process.env.APPWRITE_DATABASE_ID,
-         process.env.APPWRITE_ORDERS_COLLECTION_ID,
-         document.$id,
-         {
-           status: status
-         }
-       );
-       
-       console.log('AppwriteService - Order status updated successfully');
-       return true;
-     }
-     
-     console.log('AppwriteService - No order found with payuOrderId:', orderId);
-     return false;
-   } catch (error) {
-     console.error('AppwriteService - Update status error:', error);
-     throw error;
-   }
- }
+    const mappedStatus = statusMapping[status] || status;
+
+    const documents = await this.databases.listDocuments(
+      process.env.APPWRITE_DATABASE_ID,
+      process.env.APPWRITE_ORDERS_COLLECTION_ID,
+      [
+        Query.equal('payuOrderId', orderId)
+      ]
+    );
+
+    if (documents?.documents?.length > 0) {
+      const document = documents.documents[0];
+      
+      await this.databases.updateDocument(
+        process.env.APPWRITE_DATABASE_ID,
+        process.env.APPWRITE_ORDERS_COLLECTION_ID,
+        document.$id,
+        {
+          status: mappedStatus,
+          lastUpdated: new Date().toISOString()
+        }
+      );
+      
+      console.log('AppwriteService - Order status updated successfully:', {
+        orderId,
+        oldStatus: document.status,
+        newStatus: mappedStatus
+      });
+      return true;
+    }
+    
+    console.log('AppwriteService - No order found with payuOrderId:', orderId);
+    return false;
+  } catch (error) {
+    console.error('AppwriteService - Update status error:', error);
+    throw error;
+  }
+}
 }
 
 module.exports = new AppwriteService();

@@ -13,7 +13,7 @@ class GoogleSheetsService {
 
     await this.doc.useServiceAccountAuth({
       client_email: process.env.GOOGLE_CLIENT_EMAIL,
-      private_key: formattedKey
+      private_key: formattedKey,
     });
 
     await this.doc.loadInfo();
@@ -27,7 +27,7 @@ class GoogleSheetsService {
       console.log('Adding row to sheets:', {
         orderNumber: data['Numer zamowienia'],
         status: data['Status'],
-        payuId: data['PayU ID'] // Log PayU ID if present
+        payuId: data['PayU ID'],
       });
   
       const addedRow = await sheet.addRow(data);
@@ -49,46 +49,42 @@ class GoogleSheetsService {
         payuOrderId: orderId,
         status: status,
         orderNumber: extOrderId,
-        totalRows: rows.length
+        totalRows: rows.length,
       });
       
-      // Find order row by matching the order number (extOrderId)
       const orderRow = rows.find(row => {
-        // Clean up the order number from the sheet (remove quotes and equals sign)
         const sheetOrderNumber = row['Numer zamowienia']?.replace(/[="]/g, '');
         const matches = sheetOrderNumber === extOrderId;
         
         console.log('Comparing row:', {
           sheetOrderNumber,
           orderToFind: extOrderId,
-          matches
+          matches,
         });
         
         return matches;
       });
   
       if (orderRow) {
-        // Map PayU status to sheet status
         const mappedStatus = 
           status === 'PAID' ? 'Opłacone' :
           status === 'CANCELLED' ? 'Anulowane' :
           status === 'PENDING' ? 'Oczekujące' :
           status === 'REJECTED' ? 'Odrzucone' :
-          status; // fallback to original status if no mapping
+          status;
   
-        // Update the status
         orderRow['Status'] = mappedStatus;
         await orderRow.save();
         
         console.log('Successfully updated order status:', {
           orderNumber: extOrderId,
           oldStatus: orderRow['Status'],
-          newStatus: mappedStatus
+          newStatus: mappedStatus,
         });
       } else {
         console.warn('Order not found in sheet:', {
           searchedOrderNumber: extOrderId,
-          payuOrderId: orderId
+          payuOrderId: orderId,
         });
       }
     } catch (error) {
@@ -96,7 +92,7 @@ class GoogleSheetsService {
         error: error.message,
         orderId,
         extOrderId,
-        status
+        status,
       });
       throw new Error(`Failed to update order status: ${error.message}`);
     }

@@ -83,21 +83,29 @@ class OrderService {
     }
   }
 
-  async updateOrderStatus(orderId, status, extOrderId) {
+// In OrderService.js
+async updateOrderStatus(orderId, status, extOrderId) {
+  try {
+    // First try to update in Appwrite (for logged-in users)
     try {
-      try {
-        const updated = await AppwriteService.updateOrderStatus(orderId, status);
-        if (updated) return;
-      } catch (error) {
-        console.error('Appwrite update failed:', error);
+      const updated = await AppwriteService.updateOrderStatus(orderId, status);
+      if (updated) {
+        console.log('Successfully updated status in Appwrite for logged-in user');
+        return; // Exit if Appwrite update was successful
       }
-
-      await GoogleSheetsService.updateOrderStatus(orderId, status, extOrderId);
     } catch (error) {
-      console.error('Order status update error:', error);
-      throw error;
+      console.log('Order not found in Appwrite - might be a guest order');
     }
+
+    // If Appwrite update failed or didn't find the order, try Google Sheets (for guests)
+    await GoogleSheetsService.updateOrderStatus(orderId, status, extOrderId);
+    console.log('Successfully updated status in Google Sheets for guest user');
+
+  } catch (error) {
+    console.error('Order status update error:', error);
+    throw error;
   }
+}
 
   async createOrder(orderData, customerData, isAuthenticated, userId, ip) {
     console.log('Processing order data:', {
