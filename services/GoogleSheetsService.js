@@ -26,9 +26,10 @@ class GoogleSheetsService {
       
       console.log('Adding row to sheets:', {
         orderNumber: data['Numer zamowienia'],
-        status: data['Status']
+        status: data['Status'],
+        payuId: data['PayU ID'] // Log PayU ID if present
       });
-
+  
       const addedRow = await sheet.addRow(data);
       console.log('Successfully added row to sheet');
       return addedRow;
@@ -44,44 +45,59 @@ class GoogleSheetsService {
       const sheet = this.doc.sheetsByIndex[0];
       const rows = await sheet.getRows();
       
-      // For completed status, look for order by extOrderId
-      const isCompleted = status === 'COMPLETED';
-      console.log('Looking for order:', {
-        status,
-        orderToFind: isCompleted ? extOrderId : orderId,
-        searchType: isCompleted ? 'orderNumber' : 'payuId',
+      console.log('Attempting to update order status:', {
+        payuOrderId: orderId,
+        status: status,
+        orderNumber: extOrderId,
         totalRows: rows.length
       });
       
+      // Find order row by matching the order number (extOrderId)
       const orderRow = rows.find(row => {
-        // Remove quotes and equals sign from sheet order number
+        // Clean up the order number from the sheet (remove quotes and equals sign)
         const sheetOrderNumber = row['Numer zamowienia']?.replace(/[="]/g, '');
-        const matches = status === 'COMPLETED' && sheetOrderNumber === extOrderId;
+        const matches = sheetOrderNumber === extOrderId;
         
         console.log('Comparing row:', {
           sheetOrderNumber,
-          searchingFor: isCompleted ? extOrderId : orderId,
+          orderToFind: extOrderId,
           matches
         });
         
         return matches;
       });
-
+  
       if (orderRow) {
+        // Map PayU status to sheet status
         const mappedStatus = 
-          status === 'COMPLETED' ? 'Opłacone' :
-          status === 'CANCELED' ? 'Anulowane' :
-          status === 'PENDING' ? 'Oczekujące' : status;
-
+          status === 'PAID' ? 'Opłacone' :
+          status === 'CANCELLED' ? 'Anulowane' :
+          status === 'PENDING' ? 'Oczekujące' :
+          status === 'REJECTED' ? 'Odrzucone' :
+          status; // fallback to original status if no mapping
+  
+        // Update the status
         orderRow['Status'] = mappedStatus;
         await orderRow.save();
-        console.log(`Updated order ${isCompleted ? extOrderId : orderId} status to ${mappedStatus}`);
+        
+        console.log('Successfully updated order status:', {
+          orderNumber: extOrderId,
+          oldStatus: orderRow['Status'],
+          newStatus: mappedStatus
+        });
       } else {
-        console.warn(`Order not found in sheet. Searched by ${isCompleted ? 'orderNumber' : 'payuId'}:`, 
-          isCompleted ? extOrderId : orderId);
+        console.warn('Order not found in sheet:', {
+          searchedOrderNumber: extOrderId,
+          payuOrderId: orderId
+        });
       }
     } catch (error) {
-      console.error('Update order status error:', error);
+      console.error('Failed to update order status:', {
+        error: error.message,
+        orderId,
+        extOrderId,
+        status
+      });
       throw new Error(`Failed to update order status: ${error.message}`);
     }
   }

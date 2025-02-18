@@ -151,6 +151,7 @@ class OrderService {
       // Now create sheet data with the actual PayU ID
       const sheetData = {
         'Numer zamowienia': `="${orderNumber}"`,
+        'PayU ID': payuResponse.orderId, // Add PayU order ID
         'Data zamowienia': this._formatDateForSheets(orderDate),
         'Email': customerData.Email,
         'Telefon': customerData.Telefon,
@@ -167,7 +168,7 @@ class OrderService {
         'Metoda dostawy': orderData.shipping || 'DPD',
         'Kurier': orderData.shipping || 'DPD',
         'Koszt dostawy': '15.00 PLN',
-        'Uwagi': orderData.uwagi || '' // Keep Uwagi field for frontend notes
+        'Uwagi': orderData.uwagi || ''
       };
 
       if (isAuthenticated && userId) {
