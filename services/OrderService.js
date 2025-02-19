@@ -162,29 +162,35 @@ async updateOrderStatus(orderId, status, extOrderId) {
       });
 
       // Now create sheet data with the actual PayU ID
-      const sheetData = {
-        'Numer zamowienia': `="${orderNumber}"`,
-        'PayU ID': `="${payuResponse.orderId}"`,
-        'Data zamowienia': this._formatDateForSheets(orderDate),
-        'Email': customerData.Email,
-        'Telefon': customerData.Telefon,
-        'Produkty': JSON.stringify(formattedItems),
-        'Imie': customerData.Imie,
-        'Nazwisko': customerData.Nazwisko,
-        'Ulica': customerData.Ulica,
-        'Kod pocztowy': customerData['Kod pocztowy'],
-        'Miasto': customerData.Miasto,
-        'Status': 'Oczekujące',
-        'Suma': `${originalTotal.toFixed(2)} PLN`,
-        'Rabat': discountAmount ? `${discountAmount.toFixed(2)} PLN` : '0.00 PLN',
-        'Suma po rabacie': `${finalTotal.toFixed(2)} PLN`,
-        'Metoda dostawy': orderData.shipping || 'DPD', // Same as shipping
-        'Kurier': orderData.shipping || 'DPD',         // Both fields
-        'Koszt dostawy': '15.00 PLN',
-        'Uwagi': orderData.notes || '-',
-        'Firma': customerData.Firma || '-', // Add this line
-        'Data': this._formatDateForSheets(orderDate), // Add this line for additional date field
-      };
+// In OrderService.js
+const sheetData = {
+  'Numer zamowienia': orderNumber,  // Remove the `="${...}"` formatting
+  'PayU ID': payuResponse.orderId,  // Just pass the raw ID
+  'Data zamowienia': this._formatDateForSheets(orderDate),
+  'Email': customerData.Email,
+  'Telefon': customerData.Telefon,
+  'Produkty': JSON.stringify(formattedItems),
+  'Imie': customerData.Imie,
+  'Nazwisko': customerData.Nazwisko,
+  'Ulica': customerData.Ulica,
+  'Kod pocztowy': customerData['Kod pocztowy'],
+  'Miasto': customerData.Miasto,
+  'Status': 'Oczekujące',
+  'Suma': `${originalTotal.toFixed(2)} PLN`,
+  'Rabat': discountAmount ? `${discountAmount.toFixed(2)} PLN` : '0.00 PLN',
+  'Suma po rabacie': `${finalTotal.toFixed(2)} PLN`,
+  'Metoda dostawy': orderData.shipping || 'DPD',
+  'Kurier': orderData.shipping || 'DPD',
+  'Koszt dostawy': '15.00 PLN',
+  'Uwagi': orderData.notes || '-',
+  'Firma': customerData.Firma || '-'
+};
+
+console.log('Sheet data prepared:', {
+  orderNumber,
+  payuId: payuResponse.orderId,
+  status: 'Oczekujące'
+});
   
       if (isAuthenticated && userId) {
         try {

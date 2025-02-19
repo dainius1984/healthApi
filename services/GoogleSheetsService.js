@@ -24,24 +24,33 @@ class GoogleSheetsService {
       await this.init();
       const sheet = this.doc.sheetsByIndex[0];
       
-      // Clean the data
-      const cleanedData = {
-        ...data,
-        'PayU ID': `="${data['PayU ID'] || ''}"`.replace(/^"="/, '="'), // Fix double quotes
-        'Numer zamowienia': `="${data['Numer zamowienia'] || ''}"`.replace(/^"="/, '="'),
-      };
-      
       console.log('Adding row to sheets:', {
-        orderNumber: cleanedData['Numer zamowienia'],
-        status: cleanedData['Status'],
-        payuId: cleanedData['PayU ID'],
+        orderNumber: data['Numer zamowienia'],
+        payuId: data['PayU ID'],
+        status: data['Status']
       });
-  
-      const addedRow = await sheet.addRow(cleanedData);
-      console.log('Successfully added row to sheet');
+
+      // Format specific fields that need quotation
+      const formattedData = {
+        ...data,
+        'Numer zamowienia': `="${data['Numer zamowienia']}"`,
+        'PayU ID': `="${data['PayU ID']}"`,
+        'Data zamowienia': `="${data['Data zamowienia']}"`,
+        'Data': `="${data['Data']}"`,
+      };
+
+      const addedRow = await sheet.addRow(formattedData);
+      console.log('Successfully added row to sheet with PayU ID:', data['PayU ID']);
       return addedRow;
     } catch (error) {
-      console.error('Sheet request error:', error);
+      console.error('Sheet request error:', {
+        error: error.message,
+        stack: error.stack,
+        data: {
+          orderNumber: data['Numer zamowienia'],
+          payuId: data['PayU ID']
+        }
+      });
       throw new Error(`Failed to process sheet request: ${error.message}`);
     }
   }
@@ -56,22 +65,28 @@ class GoogleSheetsService {
         payuOrderId: orderId,
         status: status,
         orderNumber: extOrderId,
-        totalRows: rows.length,
+        totalRows: rows.length
       });
       
       const orderRow = rows.find(row => {
+        // Clean the values before comparison
         const sheetOrderNumber = row['Numer zamowienia']?.replace(/[="]/g, '');
-        const matches = sheetOrderNumber === extOrderId;
+        const sheetPayuId = row['PayU ID']?.replace(/[="]/g, '');
         
+        // Log the comparison for debugging
         console.log('Comparing row:', {
           sheetOrderNumber,
-          orderToFind: extOrderId,
-          matches,
+          sheetPayuId,
+          searchingForOrder: extOrderId,
+          searchingForPayuId: orderId,
+          matchesOrder: sheetOrderNumber === extOrderId,
+          matchesPayuId: sheetPayuId === orderId
         });
         
-        return matches;
+        // Try to match by either PayU ID or order number
+        return sheetOrderNumber === extOrderId || sheetPayuId === orderId;
       });
-  
+
       if (orderRow) {
         const mappedStatus = 
           status === 'PAID' ? 'Opłacone' :
@@ -79,27 +94,38 @@ class GoogleSheetsService {
           status === 'PENDING' ? 'Oczekujące' :
           status === 'REJECTED' ? 'Odrzucone' :
           status;
-  
+
+        // Store old status for logging
+        const oldStatus = orderRow['Status'];
+        
+        // Update the status
         orderRow['Status'] = mappedStatus;
         await orderRow.save();
         
         console.log('Successfully updated order status:', {
           orderNumber: extOrderId,
-          oldStatus: orderRow['Status'],
+          payuId: orderId,
+          oldStatus: oldStatus,
           newStatus: mappedStatus,
+          rowIndex: rows.indexOf(orderRow)
         });
       } else {
         console.warn('Order not found in sheet:', {
           searchedOrderNumber: extOrderId,
           payuOrderId: orderId,
+          availableOrders: rows.map(row => ({
+            orderNumber: row['Numer zamowienia']?.replace(/[="]/g, ''),
+            payuId: row['PayU ID']?.replace(/[="]/g, '')
+          }))
         });
       }
     } catch (error) {
       console.error('Failed to update order status:', {
         error: error.message,
+        stack: error.stack,
         orderId,
         extOrderId,
-        status,
+        status
       });
       throw new Error(`Failed to update order status: ${error.message}`);
     }
