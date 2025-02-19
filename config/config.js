@@ -41,64 +41,57 @@ const validateEnvVars = () => {
 
 // CORS configuration
 const corsConfig = {
-  origin: function(origin, callback) {
-    const allowedOrigins = [
+    origin: [
       'https://viking-eta.vercel.app',
       'https://familybalance.pl',
       'https://www.familybalance.pl',
       'https://secure.snd.payu.com',
-      'https://www.payu.pl',
+      'https://www.payu.pl', 
       'https://sandbox.payu.com',
+      // Add development origins if needed
       'http://localhost:3000',
       'http://localhost:5173'
-    ];
+    ],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    credentials: true,
+    allowedHeaders: [
+      'Content-Type', 
+      'Authorization', 
+      'Accept', 
+      'OpenPayU-Signature',
+      'Origin',
+      'X-Requested-With'
+    ],
+    exposedHeaders: ['OpenPayU-Signature'],
+    optionsSuccessStatus: 200
+  };
 
-    // Allow requests with no origin (mobile apps, Postman, etc)
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      console.warn(`Blocked request from unauthorized origin: ${origin}`);
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  credentials: true,
-  allowedHeaders: [
-    'Content-Type',
-    'Authorization',
-    'Accept',
-    'OpenPayU-Signature',
-    'Origin',
-    'X-Requested-With',
-    'Access-Control-Allow-Origin',
-    'Access-Control-Allow-Headers'
-  ],
-  exposedHeaders: [
-    'OpenPayU-Signature',
-    'Access-Control-Allow-Origin'
-  ],
-  optionsSuccessStatus: 200,
-  maxAge: 86400 // 24 hours - cache preflight requests
-};
-
-// In your Express app, make sure to apply this configuration like this:
-// app.use(cors(corsConfig));
-
-// Also add a specific handler for preflight requests
-const preflightHandler = (req, res, next) => {
-  res.header('Access-Control-Allow-Origin', req.headers.origin);
-  res.header('Access-Control-Allow-Credentials', true);
-  if (req.method === 'OPTIONS') {
-    res.status(200).end();
-    return;
+// Session configuration
+const sessionConfig = {
+  secret: process.env.SESSION_SECRET,
+  resave: false,
+  saveUninitialized: true,
+  cookie: { 
+    secure: process.env.NODE_ENV === 'production',
+    httpOnly: true,
+    maxAge: 24 * 60 * 60 * 1000 // 24 hours
   }
-  next();
 };
+
+// Environment status check
+const getEnvironmentStatus = () => ({
+  hasEmail: !!process.env.GOOGLE_CLIENT_EMAIL,
+  hasKey: !!process.env.GOOGLE_PRIVATE_KEY,
+  hasSpreadsheetId: !!process.env.SPREADSHEET_ID,
+  hasSessionSecret: !!process.env.SESSION_SECRET,
+  hasPayUConfig: !!(process.env.PAYU_POS_ID && process.env.PAYU_MD5_KEY),
+  hasAppwriteConfig: !!(process.env.APPWRITE_PROJECT_ID && process.env.APPWRITE_API_KEY),
+  nodeEnv: process.env.NODE_ENV || 'development'
+});
 
 module.exports = {
   validateEnvVars,
   corsConfig,
-  preflightHandler, // Export the preflight handler
   sessionConfig,
   getEnvironmentStatus,
   env: requiredEnvVars
