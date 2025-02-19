@@ -24,24 +24,28 @@ class OrderService {
     return 0;
   }
 
-  _formatDateForSheets(dateString) {
-    try {
-      const date = dateString instanceof Date ? dateString : new Date(dateString);
-      if (isNaN(date.getTime())) throw new Error('Invalid date');
-      
-      const day = date.getDate().toString().padStart(2, '0');
-      const month = (date.getMonth() + 1).toString().padStart(2, '0');
-      const year = date.getFullYear();
-      const hours = date.getHours().toString().padStart(2, '0');
-      const minutes = date.getMinutes().toString().padStart(2, '0');
-  
-      return `="${day}.${month}.${year} ${hours}:${minutes}"`;
-    } catch (error) {
-      console.error('Date formatting error:', error);
-      const now = new Date();
-      return `="${now.getDate().toString().padStart(2, '0')}.${(now.getMonth() + 1).toString().padStart(2, '0')}.${now.getFullYear()}"`;
-    }
+// In OrderService.js, replace the existing _formatDateForSheets method with:
+
+_formatDateForSheets(dateString) {
+  try {
+    const date = dateString instanceof Date ? dateString : new Date(dateString);
+    if (isNaN(date.getTime())) throw new Error('Invalid date');
+    
+    // Format date in a way that Google Sheets will recognize
+    const day = date.getDate().toString().padStart(2, '0');
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const year = date.getFullYear();
+    const hours = date.getHours().toString().padStart(2, '0');
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+
+    // Use a format that Google Sheets will automatically recognize as a date
+    return `${day}/${month}/${year} ${hours}:${minutes}`; // Remove the ="..." format
+  } catch (error) {
+    console.error('Date formatting error:', error);
+    const now = new Date();
+    return `${now.getDate().toString().padStart(2, '0')}/${(now.getMonth() + 1).toString().padStart(2, '0')}/${now.getFullYear()}`;
   }
+}
   
   _formatOrderItems(items) {
     if (Array.isArray(items)) {
