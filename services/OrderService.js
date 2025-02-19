@@ -159,7 +159,7 @@ async updateOrderStatus(orderId, status, extOrderId) {
       // Now create sheet data with the actual PayU ID
       const sheetData = {
         'Numer zamowienia': `="${orderNumber}"`,
-        'PayU ID': `="${payuResponse.orderId}"`, // Add quotes
+        'PayU ID': `="${payuResponse.orderId}"`,
         'Data zamowienia': this._formatDateForSheets(orderDate),
         'Email': customerData.Email,
         'Telefon': customerData.Telefon,
@@ -176,9 +176,9 @@ async updateOrderStatus(orderId, status, extOrderId) {
         'Metoda dostawy': orderData.shipping || 'DPD',
         'Kurier': orderData.shipping || 'DPD',
         'Koszt dostawy': '15.00 PLN',
-        'Uwagi': formData.notes || '' // Get notes from formData
+        'Uwagi': orderData.notes || '-' // Changed from formData.notes to orderData.notes
       };
-
+  
       if (isAuthenticated && userId) {
         try {
           const appwriteOrderData = {
@@ -198,7 +198,7 @@ async updateOrderStatus(orderId, status, extOrderId) {
             discountApplied: !!discountAmount,
             createdAt: new Date().toISOString()
           };
-
+  
           await AppwriteService.storeOrder(appwriteOrderData);
         } catch (error) {
           console.error('Appwrite storage failed, falling back to Sheets:', error);
