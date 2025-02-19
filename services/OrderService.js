@@ -29,15 +29,7 @@ class OrderService {
       const date = dateString instanceof Date ? dateString : new Date(dateString);
       if (isNaN(date.getTime())) throw new Error('Invalid date');
       
-      const formattedDate = `=${date.toLocaleDateString('pl-PL', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      })}`.replace(/^=/, '="') + '"'; // Fix quote formatting
-  
-      return formattedDate;
+      return `="${date.toLocaleDateString('pl-PL')}"`;  // Simplified format
     } catch (error) {
       console.error('Date formatting error:', error);
       const now = new Date();

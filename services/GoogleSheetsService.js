@@ -33,15 +33,15 @@ class GoogleSheetsService {
       const formattedData = {
         ...data,
         'Numer zamowienia': `="${data['Numer zamowienia']}"`,
-        'Data zamowienia': `="${data['Data zamowienia']}"`,
-        'Produkty': data['Produkty'], // Keep products as is
+        'Data zamowienia': data['Data zamowienia'], // Remove additional formatting
+        'Produkty': data['Produkty'],
         'Metoda dostawy': data['Metoda dostawy'] || 'DPD',
         'Kurier': data['Kurier'] || 'DPD',
         'Suma': data['Suma'],
         'Suma po rabacie': data['Suma po rabacie'],
         'Koszt dostawy': data['Koszt dostawy']
       };
-
+  
       const addedRow = await sheet.addRow(formattedData);
       console.log('Successfully added row to sheet:', data['Numer zamowienia']);
       return addedRow;
