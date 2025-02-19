@@ -46,46 +46,12 @@ class OrderService {
   }
   
   _formatOrderItems(items) {
-    try {
-      if (typeof items === 'string') {
-        console.log('Processing string items:', items);
-        const match = items.match(/(.*?)\s*\((\d+)x po\s*([\d.]+)/);
-        if (match) {
-          const [_, name, quantity, price] = match;
-          const productId = name.toLowerCase()
-            .replace(/[^a-z0-9]+/g, '-')
-            .replace(/(^-|-$)/g, '');
-          
-          return [{
-            id: productId,
-            n: name.trim(),
-            p: parseFloat(price),
-            q: parseInt(quantity),
-            image: `/img/products/${productId}.png`
-          }];
-        }
-      }
-
-      if (Array.isArray(items)) {
-        return items.map(item => ({
-          id: item.id || item.productId || 0,
-          n: item.name || item.n || '',
-          p: parseFloat(item.price || item.p || 0),
-          q: parseInt(item.quantity || item.q || 1),
-          image: item.image || `/img/products/${item.id}.png`
-        }));
-      }
-
-      if (items?.cart && Array.isArray(items.cart)) {
-        return this._formatOrderItems(items.cart);
-      }
-
-      console.error('Unable to parse order items:', items);
-      return [];
-    } catch (error) {
-      console.error('Error formatting order items:', error);
-      return [];
+    if (Array.isArray(items)) {
+      return items.map(item => 
+        `${item.name || item.n} (${item.quantity || item.q}x)`
+      ).join('\n');
     }
+    return '';
   }
 
 // In OrderService.js
@@ -164,12 +130,11 @@ async updateOrderStatus(orderId, status, extOrderId) {
       // Now create sheet data with the actual PayU ID
 // In OrderService.js
 const sheetData = {
-  'Numer zamowienia': orderNumber,  // Remove the `="${...}"` formatting
-  'PayU ID': payuResponse.orderId,  // Just pass the raw ID
+  'Numer zamowienia': orderNumber,
   'Data zamowienia': this._formatDateForSheets(orderDate),
   'Email': customerData.Email,
   'Telefon': customerData.Telefon,
-  'Produkty': JSON.stringify(formattedItems),
+  'Produkty': this._formatOrderItems(orderData.cart), // Use simpler format
   'Imie': customerData.Imie,
   'Nazwisko': customerData.Nazwisko,
   'Ulica': customerData.Ulica,

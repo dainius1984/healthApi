@@ -26,31 +26,27 @@ class GoogleSheetsService {
       
       console.log('Adding row to sheets:', {
         orderNumber: data['Numer zamowienia'],
-        payuId: data['PayU ID'],
         status: data['Status']
       });
 
-      // Format specific fields that need quotation
+      // Format dates and numbers
       const formattedData = {
         ...data,
         'Numer zamowienia': `="${data['Numer zamowienia']}"`,
-        'PayU ID': `="${data['PayU ID']}"`,
         'Data zamowienia': `="${data['Data zamowienia']}"`,
-        'Data': `="${data['Data']}"`,
+        'Produkty': data['Produkty'], // Keep products as is
+        'Metoda dostawy': data['Metoda dostawy'] || 'DPD',
+        'Kurier': data['Kurier'] || 'DPD',
+        'Suma': data['Suma'],
+        'Suma po rabacie': data['Suma po rabacie'],
+        'Koszt dostawy': data['Koszt dostawy']
       };
 
       const addedRow = await sheet.addRow(formattedData);
-      console.log('Successfully added row to sheet with PayU ID:', data['PayU ID']);
+      console.log('Successfully added row to sheet:', data['Numer zamowienia']);
       return addedRow;
     } catch (error) {
-      console.error('Sheet request error:', {
-        error: error.message,
-        stack: error.stack,
-        data: {
-          orderNumber: data['Numer zamowienia'],
-          payuId: data['PayU ID']
-        }
-      });
+      console.error('Sheet request error:', error);
       throw new Error(`Failed to process sheet request: ${error.message}`);
     }
   }
@@ -62,29 +58,21 @@ class GoogleSheetsService {
       const rows = await sheet.getRows();
       
       console.log('Attempting to update order status:', {
-        payuOrderId: orderId,
         status: status,
-        orderNumber: extOrderId,
-        totalRows: rows.length
+        orderNumber: extOrderId
       });
       
       const orderRow = rows.find(row => {
-        // Clean the values before comparison
         const sheetOrderNumber = row['Numer zamowienia']?.replace(/[="]/g, '');
-        const sheetPayuId = row['PayU ID']?.replace(/[="]/g, '');
+        const matches = sheetOrderNumber === extOrderId;
         
-        // Log the comparison for debugging
         console.log('Comparing row:', {
           sheetOrderNumber,
-          sheetPayuId,
-          searchingForOrder: extOrderId,
-          searchingForPayuId: orderId,
-          matchesOrder: sheetOrderNumber === extOrderId,
-          matchesPayuId: sheetPayuId === orderId
+          orderToFind: extOrderId,
+          matches
         });
         
-        // Try to match by either PayU ID or order number
-        return sheetOrderNumber === extOrderId || sheetPayuId === orderId;
+        return matches;
       });
 
       if (orderRow) {
@@ -95,38 +83,21 @@ class GoogleSheetsService {
           status === 'REJECTED' ? 'Odrzucone' :
           status;
 
-        // Store old status for logging
-        const oldStatus = orderRow['Status'];
-        
-        // Update the status
         orderRow['Status'] = mappedStatus;
         await orderRow.save();
         
         console.log('Successfully updated order status:', {
           orderNumber: extOrderId,
-          payuId: orderId,
-          oldStatus: oldStatus,
-          newStatus: mappedStatus,
-          rowIndex: rows.indexOf(orderRow)
+          oldStatus: orderRow['Status'],
+          newStatus: mappedStatus
         });
       } else {
         console.warn('Order not found in sheet:', {
-          searchedOrderNumber: extOrderId,
-          payuOrderId: orderId,
-          availableOrders: rows.map(row => ({
-            orderNumber: row['Numer zamowienia']?.replace(/[="]/g, ''),
-            payuId: row['PayU ID']?.replace(/[="]/g, '')
-          }))
+          searchedOrderNumber: extOrderId
         });
       }
     } catch (error) {
-      console.error('Failed to update order status:', {
-        error: error.message,
-        stack: error.stack,
-        orderId,
-        extOrderId,
-        status
-      });
+      console.error('Failed to update order status:', error);
       throw new Error(`Failed to update order status: ${error.message}`);
     }
   }
