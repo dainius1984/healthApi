@@ -159,7 +159,7 @@ async updateOrderStatus(orderId, status, extOrderId) {
       // Now create sheet data with the actual PayU ID
       const sheetData = {
         'Numer zamowienia': `="${orderNumber}"`,
-        'PayU ID': payuResponse.orderId, // Add PayU order ID
+        'PayU ID': `="${payuResponse.orderId}"`, // Add quotes
         'Data zamowienia': this._formatDateForSheets(orderDate),
         'Email': customerData.Email,
         'Telefon': customerData.Telefon,
@@ -176,7 +176,7 @@ async updateOrderStatus(orderId, status, extOrderId) {
         'Metoda dostawy': orderData.shipping || 'DPD',
         'Kurier': orderData.shipping || 'DPD',
         'Koszt dostawy': '15.00 PLN',
-        'Uwagi': orderData.uwagi || ''
+        'Uwagi': formData.notes || '' // Get notes from formData
       };
 
       if (isAuthenticated && userId) {
