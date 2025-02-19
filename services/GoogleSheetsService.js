@@ -24,13 +24,20 @@ class GoogleSheetsService {
       await this.init();
       const sheet = this.doc.sheetsByIndex[0];
       
+      // Clean the data
+      const cleanedData = {
+        ...data,
+        'PayU ID': `="${data['PayU ID'] || ''}"`.replace(/^"="/, '="'), // Fix double quotes
+        'Numer zamowienia': `="${data['Numer zamowienia'] || ''}"`.replace(/^"="/, '="'),
+      };
+      
       console.log('Adding row to sheets:', {
-        orderNumber: data['Numer zamowienia'],
-        status: data['Status'],
-        payuId: data['PayU ID'],
+        orderNumber: cleanedData['Numer zamowienia'],
+        status: cleanedData['Status'],
+        payuId: cleanedData['PayU ID'],
       });
   
-      const addedRow = await sheet.addRow(data);
+      const addedRow = await sheet.addRow(cleanedData);
       console.log('Successfully added row to sheet');
       return addedRow;
     } catch (error) {

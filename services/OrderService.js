@@ -29,17 +29,22 @@ class OrderService {
       const date = dateString instanceof Date ? dateString : new Date(dateString);
       if (isNaN(date.getTime())) throw new Error('Invalid date');
       
-      return `="${date.toLocaleDateString('pl-PL', {
+      const formattedDate = `=${date.toLocaleDateString('pl-PL', {
         day: '2-digit',
         month: '2-digit',
-        year: 'numeric'
-      })}"`;
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      })}`.replace(/^=/, '="') + '"'; // Fix quote formatting
+  
+      return formattedDate;
     } catch (error) {
       console.error('Date formatting error:', error);
-      return `="${new Date().toLocaleDateString('pl-PL')}"`;
+      const now = new Date();
+      return `="${now.toLocaleDateString('pl-PL')}"`;
     }
   }
-
+  
   _formatOrderItems(items) {
     try {
       if (typeof items === 'string') {
@@ -173,10 +178,12 @@ async updateOrderStatus(orderId, status, extOrderId) {
         'Suma': `${originalTotal.toFixed(2)} PLN`,
         'Rabat': discountAmount ? `${discountAmount.toFixed(2)} PLN` : '0.00 PLN',
         'Suma po rabacie': `${finalTotal.toFixed(2)} PLN`,
-        'Metoda dostawy': orderData.shipping || 'DPD',
-        'Kurier': orderData.shipping || 'DPD',
+        'Metoda dostawy': orderData.shipping || 'DPD', // Same as shipping
+        'Kurier': orderData.shipping || 'DPD',         // Both fields
         'Koszt dostawy': '15.00 PLN',
-        'Uwagi': orderData.notes || '-' // Changed from formData.notes to orderData.notes
+        'Uwagi': orderData.notes || '-',
+        'Firma': customerData.Firma || '-', // Add this line
+        'Data': this._formatDateForSheets(orderDate), // Add this line for additional date field
       };
   
       if (isAuthenticated && userId) {
