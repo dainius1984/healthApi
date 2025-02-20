@@ -26,24 +26,24 @@ class GoogleSheetsService {
       
       console.log('Adding row to sheets:', {
         orderNumber: data['Numer zamowienia'],
-        date: data['Data'], // Update log to match new column name
-        status: data['Status']
+        date: data['Data'],
+        status: data['Status'],
+        discount: data['Czy naliczono rabat'],
+        total: data['Suma']
       });
   
-      // Format specific fields that need quotation
       const formattedData = {
         ...data,
         'Numer zamowienia': `="${data['Numer zamowienia']}"`,
-        'Data': `="${data['Data']}"`, // Update column name here too
-        'Produkty': data['Produkty'],
-        'Metoda dostawy': data['Metoda dostawy'] || 'DPD',
-        'Kurier': data['Kurier'] || 'DPD'
+        'Data': `="${data['Data']}"`,
+        'Produkty': data['Produkty']
       };
   
       const addedRow = await sheet.addRow(formattedData);
       console.log('Successfully added row to sheet:', {
         orderNumber: data['Numer zamowienia'],
-        date: data['Data'] // Update log
+        date: data['Data'],
+        total: data['Suma']
       });
       return addedRow;
     } catch (error) {

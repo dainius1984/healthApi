@@ -132,33 +132,21 @@ async updateOrderStatus(orderId, status, extOrderId) {
 const sheetData = {
   'Numer zamowienia': orderNumber,
   'Data': this._formatDateForSheets(orderDate),
-  'Email': customerData.Email,
-  'Telefon': customerData.Telefon,
-  'Produkty': this._formatOrderItems(orderData.cart),
+  'Status': 'Oczekujące',
+  'Czy naliczono rabat': discountAmount > 0 ? 'Tak' : 'Nie',
+  'Suma': `${finalTotal.toFixed(2)} PLN`, // Final total including discount and shipping
+  'Wysylka': orderData.shipping || 'DPD',
   'Imie': customerData.Imie,
   'Nazwisko': customerData.Nazwisko,
+  'Firma': customerData.Firma || '-',
+  'Email': customerData.Email,
+  'Telefon': customerData.Telefon,
   'Ulica': customerData.Ulica,
   'Kod pocztowy': customerData['Kod pocztowy'],
   'Miasto': customerData.Miasto,
-  'Status': 'Oczekujące',
-  // Original price before any discounts
-  'Suma': `${originalTotal.toFixed(2)} PLN`,
-  // Add new column for discount applied status
-  'Czy naliczono rabat': discountAmount > 0 ? 'Tak' : 'Nie',
-  // Discount amount if any
-  'Rabat': discountAmount ? `${discountAmount.toFixed(2)} PLN` : '0.00 PLN',
-  // Price after discount but before shipping
-  'Suma po rabacie': `${(originalTotal - discountAmount).toFixed(2)} PLN`,
-  // Shipping method and cost
-  'Metoda dostawy': orderData.shipping || 'DPD',
-  'Wysyłka': orderData.shipping || 'DPD', // Add shipping information
-  'Koszt dostawy': '15.00 PLN',
-  // Final total including discount and shipping
-  'Suma końcowa': `${finalTotal.toFixed(2)} PLN`,
   'Uwagi': orderData.notes || '-',
-  'Firma': customerData.Firma || '-'
+  'Produkty': this._formatOrderItems(orderData.cart)
 };
-
 console.log('Sheet data prepared:', {
   orderNumber,
   payuId: payuResponse.orderId,
