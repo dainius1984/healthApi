@@ -162,8 +162,9 @@ console.log('Sheet data prepared:', {
 
 // In OrderService.js
 
+// In OrderService.js - update the appwriteOrderData preparation:
+
 if (isAuthenticated && userId) {
-  // For authenticated users - store in Appwrite only
   const appwriteOrderData = {
     userId,
     orderNumber: orderNumber,
@@ -172,11 +173,13 @@ if (isAuthenticated && userId) {
     total: finalTotal,
     subtotal: originalTotal,
     discountAmount: discountAmount,
+    // Format items to match existing structure
     items: orderData.cart.map(item => ({
-      name: item.name,
-      quantity: item.quantity,
-      price: item.price,
-      total: item.quantity * parseFloat(item.price)
+      id: item.id || item.name.toLowerCase().replace(/[^a-z0-9]/g, ''),
+      n: item.name,
+      p: parseFloat(item.price),
+      q: item.quantity,
+      image: item.image || `/img/products/${item.id || item.name.toLowerCase().replace(/[^a-z0-9]/g, '')}.png`
     })),
     customerData: {
       Imie: customerData.Imie,
@@ -200,17 +203,12 @@ if (isAuthenticated && userId) {
   console.log('Storing authenticated user order in Appwrite:', {
     orderNumber: appwriteOrderData.orderNumber,
     payuOrderId: appwriteOrderData.payuOrderId,
-    items: appwriteOrderData.items.length,
+    items: appwriteOrderData.items,
     status: appwriteOrderData.status
   });
 
   await AppwriteService.storeOrder(appwriteOrderData);
   console.log('Order successfully stored in Appwrite');
-} else {
-  // For guest users - store in Google Sheets
-  console.log('Saving order to Google Sheets (guest user)');
-  await GoogleSheetsService.addRow(sheetData);
-  console.log('Guest order saved to sheets with PayU ID:', payuResponse.orderId);
 }
 
 module.exports = new OrderService();

@@ -53,46 +53,76 @@ class AppwriteService {
    }
  }
 
- async updateOrderStatus(orderId, status) {
+ // In AppwriteService.js - update the updateOrderStatus method:
+
+async updateOrderStatus(orderId, status) {
   try {
     console.log('AppwriteService - Attempting to update order status:', {
       payuOrderId: orderId,
-      newStatus: status
+      newStatus: status,
+      originalStatus: status
     });
 
-    // Map PayU status to our system status
     const statusMapping = {
-      'PAID': 'opłacone',
-      'CANCELLED': 'anulowane',
-      'PENDING': 'oczekujące',
-      'REJECTED': 'odrzucone'
+      'PAID': 'Opłacone',
+      'COMPLETED': 'Opłacone',
+      'CANCELED': 'Anulowane',
+      'CANCELLED': 'Anulowane',
+      'PENDING': 'Oczekujące',
+      'WAITING': 'Oczekujące',
+      'REJECTED': 'Odrzucone'
     };
 
-    const mappedStatus = statusMapping[status] || status;
+    const mappedStatus = statusMapping[status.toUpperCase()] || status;
+
+    console.log('AppwriteService - Mapped status:', {
+      original: status,
+      mapped: mappedStatus
+    });
+
+    // Debug log the query
+    console.log('AppwriteService - Searching for document with payuOrderId:', orderId);
 
     const documents = await this.databases.listDocuments(
       process.env.APPWRITE_DATABASE_ID,
       process.env.APPWRITE_ORDERS_COLLECTION_ID,
-      [
-        Query.equal('payuOrderId', orderId)
-      ]
+      [Query.equal('payuOrderId', orderId)]
     );
+
+    console.log('AppwriteService - Search results:', {
+      found: documents?.documents?.length > 0,
+      documentsCount: documents?.documents?.length,
+      firstDocId: documents?.documents?.[0]?.$id
+    });
 
     if (documents?.documents?.length > 0) {
       const document = documents.documents[0];
+
+      console.log('AppwriteService - Found document:', {
+        id: document.$id,
+        orderNumber: document.orderNumber,
+        currentStatus: document.status,
+        payuOrderId: document.payuOrderId
+      });
       
+      const updateData = {
+        status: mappedStatus,
+        lastUpdated: new Date().toISOString(),
+        statusUpdatedAt: new Date().toISOString()
+      };
+
+      console.log('AppwriteService - Updating document with data:', updateData);
+
       await this.databases.updateDocument(
         process.env.APPWRITE_DATABASE_ID,
         process.env.APPWRITE_ORDERS_COLLECTION_ID,
         document.$id,
-        {
-          status: mappedStatus,
-          lastUpdated: new Date().toISOString()
-        }
+        updateData
       );
       
       console.log('AppwriteService - Order status updated successfully:', {
         orderId,
+        orderNumber: document.orderNumber,
         oldStatus: document.status,
         newStatus: mappedStatus
       });
@@ -102,7 +132,12 @@ class AppwriteService {
     console.log('AppwriteService - No order found with payuOrderId:', orderId);
     return false;
   } catch (error) {
-    console.error('AppwriteService - Update status error:', error);
+    console.error('AppwriteService - Update status error:', {
+      error: error.message,
+      stack: error.stack,
+      orderId,
+      status
+    });
     throw error;
   }
 }
