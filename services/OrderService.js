@@ -158,51 +158,59 @@ console.log('Sheet data prepared:', {
   finalTotal
 });
   
-      if (isAuthenticated && userId) {
-        try {
-          const appwriteOrderData = {
-            userId,
-            orderNumber,
-            payuOrderId: payuResponse.orderId,
-            status: 'pending',
-            total: finalTotal,
-            subtotal: originalTotal,
-            discountAmount: discountAmount,
-            items: JSON.stringify(formattedItems),
-            customerData,
-            shippingDetails: {
-              method: orderData.shipping,
-              cost: orderData.shippingCost
-            },
-            discountApplied: !!discountAmount,
-            createdAt: new Date().toISOString()
-          };
-  
-          await AppwriteService.storeOrder(appwriteOrderData);
-        } catch (error) {
-          console.error('Appwrite storage failed, falling back to Sheets:', error);
-          await GoogleSheetsService.addRow(sheetData);
-          console.log('Order saved to sheets with PayU ID:', payuResponse.orderId);
-        }
-      } else {
-        console.log('Saving order to Google Sheets (guest user)');
-        await GoogleSheetsService.addRow(sheetData);
-        console.log('Guest order saved to sheets with PayU ID:', payuResponse.orderId);
-      }
+// In OrderService.js, update just the appwriteOrderData part:
 
-      return {
-        success: true,
-        redirectUrl: payuResponse.redirectUrl,
-        orderId: payuResponse.orderId,
-        orderNumber,
-        total: finalTotal,
-        discountApplied: !!discountAmount
-      };
-    } catch (error) {
-      console.error('Order creation error:', error);
-      throw error;
-    }
-  }
+// In OrderService.js
+
+if (isAuthenticated && userId) {
+  // For authenticated users - store in Appwrite only
+  const appwriteOrderData = {
+    userId,
+    orderNumber: orderNumber,
+    payuOrderId: payuResponse.orderId,
+    status: 'Oczekujące',
+    total: finalTotal,
+    subtotal: originalTotal,
+    discountAmount: discountAmount,
+    items: orderData.cart.map(item => ({
+      name: item.name,
+      quantity: item.quantity,
+      price: item.price,
+      total: item.quantity * parseFloat(item.price)
+    })),
+    customerData: {
+      Imie: customerData.Imie,
+      Nazwisko: customerData.Nazwisko,
+      Email: customerData.Email,
+      Telefon: customerData.Telefon,
+      Ulica: customerData.Ulica,
+      'Kod pocztowy': customerData['Kod pocztowy'],
+      Miasto: customerData.Miasto,
+      Firma: customerData.Firma || '',
+      Uwagi: orderData.notes || ''
+    },
+    shippingDetails: {
+      method: orderData.shipping || 'DPD',
+      cost: '15.00'
+    },
+    discountApplied: !!discountAmount,
+    createdAt: new Date().toISOString()
+  };
+
+  console.log('Storing authenticated user order in Appwrite:', {
+    orderNumber: appwriteOrderData.orderNumber,
+    payuOrderId: appwriteOrderData.payuOrderId,
+    items: appwriteOrderData.items.length,
+    status: appwriteOrderData.status
+  });
+
+  await AppwriteService.storeOrder(appwriteOrderData);
+  console.log('Order successfully stored in Appwrite');
+} else {
+  // For guest users - store in Google Sheets
+  console.log('Saving order to Google Sheets (guest user)');
+  await GoogleSheetsService.addRow(sheetData);
+  console.log('Guest order saved to sheets with PayU ID:', payuResponse.orderId);
 }
 
 module.exports = new OrderService();
