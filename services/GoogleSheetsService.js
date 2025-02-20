@@ -26,7 +26,7 @@ class GoogleSheetsService {
       
       console.log('Adding row to sheets:', {
         orderNumber: data['Numer zamowienia'],
-        date: data['Data zamowienia'],
+        date: data['Data'], // Update log to match new column name
         status: data['Status']
       });
   
@@ -34,8 +34,7 @@ class GoogleSheetsService {
       const formattedData = {
         ...data,
         'Numer zamowienia': `="${data['Numer zamowienia']}"`,
-        // Ensure date is formatted with quotes for Google Sheets
-        'Data zamowienia': `="${data['Data zamowienia']}"`,
+        'Data': `="${data['Data']}"`, // Update column name here too
         'Produkty': data['Produkty'],
         'Metoda dostawy': data['Metoda dostawy'] || 'DPD',
         'Kurier': data['Kurier'] || 'DPD'
@@ -44,7 +43,7 @@ class GoogleSheetsService {
       const addedRow = await sheet.addRow(formattedData);
       console.log('Successfully added row to sheet:', {
         orderNumber: data['Numer zamowienia'],
-        date: data['Data zamowienia']
+        date: data['Data'] // Update log
       });
       return addedRow;
     } catch (error) {

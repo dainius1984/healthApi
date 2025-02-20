@@ -131,10 +131,10 @@ async updateOrderStatus(orderId, status, extOrderId) {
 // In OrderService.js
 const sheetData = {
   'Numer zamowienia': orderNumber,
-  'Data zamowienia': this._formatDateForSheets(orderDate),
+  'Data': this._formatDateForSheets(orderDate), // Change from 'Data zamowienia' to 'Data'
   'Email': customerData.Email,
   'Telefon': customerData.Telefon,
-  'Produkty': this._formatOrderItems(orderData.cart), // Use simpler format
+  'Produkty': this._formatOrderItems(orderData.cart),
   'Imie': customerData.Imie,
   'Nazwisko': customerData.Nazwisko,
   'Ulica': customerData.Ulica,
