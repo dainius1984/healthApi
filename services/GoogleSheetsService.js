@@ -34,7 +34,8 @@ class GoogleSheetsService {
       const formattedData = {
         ...data,
         'Numer zamowienia': `="${data['Numer zamowienia']}"`,
-        'Data zamowienia': data['Data zamowienia'], // Keep the format from OrderService
+        // Ensure date is formatted with quotes for Google Sheets
+        'Data zamowienia': `="${data['Data zamowienia']}"`,
         'Produkty': data['Produkty'],
         'Metoda dostawy': data['Metoda dostawy'] || 'DPD',
         'Kurier': data['Kurier'] || 'DPD'
@@ -51,7 +52,7 @@ class GoogleSheetsService {
       throw new Error(`Failed to process sheet request: ${error.message}`);
     }
   }
-
+  
   async updateOrderStatus(orderId, status, extOrderId) {
     try {
       await this.init();
