@@ -162,17 +162,20 @@ console.log('Sheet data prepared:', {
 
 // In OrderService.js, update the Appwrite order data preparation:
 
+// In OrderService.js, update the Appwrite section:
+
 if (isAuthenticated && userId) {
   try {
     const appwriteOrderData = {
       userId,
-      orderNumber: payuResponse.extOrderId, // Use PayU's extOrderId for matching
-      payuOrderId: payuResponse.orderId,    // Store internal PayU ID separately
-      status: 'Oczekujące',                 // Match the case with other systems
+      orderNumber: orderNumber,                // Use our original orderNumber
+      payuOrderId: payuResponse.orderId,       // Store PayU's internal ID
+      payuExtOrderId: payuResponse.extOrderId, // Store PayU's external ID
+      status: 'Oczekujące',
       total: finalTotal,
       subtotal: originalTotal,
       discountAmount: discountAmount,
-      items: orderData.cart.map(item => ({  // Store full item details
+      items: orderData.cart.map(item => ({
         name: item.name,
         quantity: item.quantity,
         price: item.price,
@@ -200,6 +203,7 @@ if (isAuthenticated && userId) {
     console.log('Preparing Appwrite order data:', {
       orderNumber: appwriteOrderData.orderNumber,
       payuOrderId: appwriteOrderData.payuOrderId,
+      payuExtOrderId: appwriteOrderData.payuExtOrderId,
       items: appwriteOrderData.items.length,
       shipping: appwriteOrderData.shippingDetails,
       status: appwriteOrderData.status

@@ -12,92 +12,73 @@ class AppwriteService {
     this.databases = new Databases(this.client);
   }
 
-  async storeOrder(orderData) {
-    try {
-      console.log('AppwriteService - Attempting to store order:', {
-        orderNumber: orderData.orderNumber,
-        userId: orderData.userId,
-        items: orderData.items, // Log items for debugging
-        shipping: orderData.shippingDetails
-      });
-      
-      // Parse items if they're in string format
-      let parsedItems = orderData.items;
-      if (typeof orderData.items === 'string') {
-        try {
-          parsedItems = JSON.parse(orderData.items);
-        } catch (e) {
-          console.warn('Failed to parse items JSON, using as is:', e);
-        }
-      }
+// In AppwriteService.js
 
-      // Ensure shipping cost is properly formatted
-      const shippingCost = orderData.shippingDetails?.cost || '15.00';
+async storeOrder(orderData) {
+  try {
+    console.log('AppwriteService - Attempting to store order:', {
+      orderNumber: orderData.orderNumber,
+      payuOrderId: orderData.payuOrderId,
+      payuExtOrderId: orderData.payuExtOrderId,
+      userId: orderData.userId
+    });
+    
+    // Prepare document data
+    const documentData = {
+      orderNumber: orderData.orderNumber,
+      payuOrderId: orderData.payuOrderId,
+      payuExtOrderId: orderData.payuExtOrderId,
+      userId: orderData.userId,
+      createdAt: new Date().toISOString(),
+      lastUpdated: new Date().toISOString(),
+      status: orderData.status,
+      total: orderData.total.toString(),
+      items: Array.isArray(orderData.items) ? orderData.items : [],
+      subtotal: orderData.subtotal?.toString() || '0',
+      discountAmount: orderData.discountAmount?.toString() || '0',
+      shippingCost: orderData.shippingDetails?.cost || '15.00',
+      firstName: orderData.customerData?.Imie || '',
+      lastName: orderData.customerData?.Nazwisko || '',
+      email: orderData.customerData?.Email || '',
+      phone: orderData.customerData?.Telefon || '',
+      shipping: orderData.shippingDetails?.method || 'DPD',
+      address: {
+        street: orderData.customerData?.Ulica || '',
+        city: orderData.customerData?.Miasto || '',
+        postalCode: orderData.customerData?.['Kod pocztowy'] || '',
+      },
+      discountApplied: !!orderData.discountApplied,
+      notes: orderData.customerData?.Uwagi || ''
+    };
 
-      // Prepare document data with all required fields
-      const documentData = {
-        orderNumber: orderData.orderNumber,
-        userId: orderData.userId,
-        createdAt: new Date().toISOString(),
-        lastUpdated: new Date().toISOString(),
-        total: orderData.total.toString(),
-        items: parsedItems, // Use parsed items
-        subtotal: orderData.subtotal?.toString() || '0',
-        discountAmount: orderData.discountAmount?.toString() || '0',
-        shippingCost: shippingCost.toString(),
-        firstName: orderData.customerData?.Imie || '',
-        lastName: orderData.customerData?.Nazwisko || '',
-        email: orderData.customerData?.Email || '',
-        phone: orderData.customerData?.Telefon || '',
-        shipping: orderData.shippingDetails?.method || 'DPD',
-        address: {
-          street: orderData.customerData?.Ulica || '',
-          city: orderData.customerData?.Miasto || '',
-          postalCode: orderData.customerData?.['Kod pocztowy'] || '',
-        },
-        discountApplied: !!orderData.discountApplied,
-        payuOrderId: orderData.payuOrderId || '',
-        status: orderData.status || 'pending',
-        notes: orderData.customerData?.Uwagi || ''
-      };
+    const document = await this.databases.createDocument(
+      process.env.APPWRITE_DATABASE_ID,
+      process.env.APPWRITE_ORDERS_COLLECTION_ID,
+      ID.unique(),
+      documentData
+    );
+    
+    console.log('AppwriteService - Order stored successfully:', {
+      documentId: document.$id,
+      orderNumber: document.orderNumber,
+      payuOrderId: document.payuOrderId,
+      status: document.status
+    });
 
-      console.log('AppwriteService - Prepared document data:', {
-        orderNumber: documentData.orderNumber,
-        items: documentData.items,
-        shipping: documentData.shipping,
-        shippingCost: documentData.shippingCost
-      });
-
-      const document = await this.databases.createDocument(
-        process.env.APPWRITE_DATABASE_ID,
-        process.env.APPWRITE_ORDERS_COLLECTION_ID,
-        ID.unique(),
-        documentData
-      );
-      
-      console.log('AppwriteService - Order stored successfully:', {
-        documentId: document.$id,
-        orderNumber: document.orderNumber,
-        status: document.status
-      });
-
-      return document;
-    } catch (error) {
-      console.error('AppwriteService - Store order error:', error);
-      throw error;
-    }
+    return document;
+  } catch (error) {
+    console.error('AppwriteService - Store order error:', error);
+    throw error;
   }
-
-  // In AppwriteService.js, update the updateOrderStatus method:
+}
 
 async updateOrderStatus(orderId, status) {
   try {
     console.log('AppwriteService - Attempting to update order status:', {
-      orderId,
+      payuOrderId: orderId,
       newStatus: status
     });
 
-    // Updated status mapping to match PayU's exact casing
     const statusMapping = {
       'PAID': 'Opłacone',
       'COMPLETED': 'Opłacone',
@@ -110,17 +91,16 @@ async updateOrderStatus(orderId, status) {
 
     const mappedStatus = statusMapping[status.toUpperCase()] || status;
 
-    // Find order by PayU orderId in the external ID field
+    // Find order by PayU orderId
     const documents = await this.databases.listDocuments(
       process.env.APPWRITE_DATABASE_ID,
       process.env.APPWRITE_ORDERS_COLLECTION_ID,
-      [Query.equal('orderNumber', orderId)]  // Use orderNumber instead of payuOrderId
+      [Query.equal('payuOrderId', orderId)]  // Search by PayU's internal ID
     );
 
     if (documents?.documents?.length > 0) {
       const document = documents.documents[0];
       
-      // Update document with new status and timestamp
       const updateData = {
         status: mappedStatus,
         lastUpdated: new Date().toISOString()
@@ -128,7 +108,7 @@ async updateOrderStatus(orderId, status) {
 
       console.log('AppwriteService - Updating document:', {
         documentId: document.$id,
-        orderNumber: document.orderNumber,
+        payuOrderId: orderId,
         currentStatus: document.status,
         newStatus: mappedStatus
       });
@@ -149,7 +129,7 @@ async updateOrderStatus(orderId, status) {
       return true;
     }
     
-    console.log('AppwriteService - No order found with orderId:', orderId);
+    console.log('AppwriteService - No order found with payuOrderId:', orderId);
     return false;
   } catch (error) {
     console.error('AppwriteService - Update status error:', error);
