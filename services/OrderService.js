@@ -158,65 +158,37 @@ console.log('Sheet data prepared:', {
   finalTotal
 });
   
-// In OrderService.js, update the createOrder method's Appwrite section:
-
-// In OrderService.js, update the Appwrite order data preparation:
-
-// In OrderService.js, update the Appwrite section:
-
-if (isAuthenticated && userId) {
-  try {
-    const appwriteOrderData = {
-      userId,
-      orderNumber: orderNumber,                // Use our original orderNumber
-      payuOrderId: payuResponse.orderId,       // Store PayU's internal ID
-      payuExtOrderId: payuResponse.extOrderId, // Store PayU's external ID
-      status: 'Oczekujące',
-      total: finalTotal,
-      subtotal: originalTotal,
-      discountAmount: discountAmount,
-      items: orderData.cart.map(item => ({
-        name: item.name,
-        quantity: item.quantity,
-        price: item.price,
-        total: item.quantity * parseFloat(item.price)
-      })),
-      customerData: {
-        Imie: customerData.Imie,
-        Nazwisko: customerData.Nazwisko,
-        Email: customerData.Email,
-        Telefon: customerData.Telefon,
-        Ulica: customerData.Ulica,
-        'Kod pocztowy': customerData['Kod pocztowy'],
-        Miasto: customerData.Miasto,
-        Firma: customerData.Firma || '',
-        Uwagi: orderData.notes || ''
-      },
-      shippingDetails: {
-        method: orderData.shipping || 'DPD',
-        cost: '15.00'
-      },
-      discountApplied: !!discountAmount,
-      createdAt: new Date().toISOString()
-    };
-
-    console.log('Preparing Appwrite order data:', {
-      orderNumber: appwriteOrderData.orderNumber,
-      payuOrderId: appwriteOrderData.payuOrderId,
-      payuExtOrderId: appwriteOrderData.payuExtOrderId,
-      items: appwriteOrderData.items.length,
-      shipping: appwriteOrderData.shippingDetails,
-      status: appwriteOrderData.status
-    });
-
-    await AppwriteService.storeOrder(appwriteOrderData);
-    console.log('Order successfully stored in Appwrite');
-  } catch (error) {
-    console.error('Appwrite storage failed, falling back to Sheets:', error);
-    await GoogleSheetsService.addRow(sheetData);
-    console.log('Order saved to sheets with PayU ID:', payuResponse.orderId);
-  }
-}
+      if (isAuthenticated && userId) {
+        try {
+          const appwriteOrderData = {
+            userId,
+            orderNumber,
+            payuOrderId: payuResponse.orderId,
+            status: 'pending',
+            total: finalTotal,
+            subtotal: originalTotal,
+            discountAmount: discountAmount,
+            items: JSON.stringify(formattedItems),
+            customerData,
+            shippingDetails: {
+              method: orderData.shipping,
+              cost: orderData.shippingCost
+            },
+            discountApplied: !!discountAmount,
+            createdAt: new Date().toISOString()
+          };
+  
+          await AppwriteService.storeOrder(appwriteOrderData);
+        } catch (error) {
+          console.error('Appwrite storage failed, falling back to Sheets:', error);
+          await GoogleSheetsService.addRow(sheetData);
+          console.log('Order saved to sheets with PayU ID:', payuResponse.orderId);
+        }
+      } else {
+        console.log('Saving order to Google Sheets (guest user)');
+        await GoogleSheetsService.addRow(sheetData);
+        console.log('Guest order saved to sheets with PayU ID:', payuResponse.orderId);
+      }
 
       return {
         success: true,
