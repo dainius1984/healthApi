@@ -131,7 +131,7 @@ async updateOrderStatus(orderId, status, extOrderId) {
 // In OrderService.js
 const sheetData = {
   'Numer zamowienia': orderNumber,
-  'Data': this._formatDateForSheets(orderDate), // Change from 'Data zamowienia' to 'Data'
+  'Data': this._formatDateForSheets(orderDate),
   'Email': customerData.Email,
   'Telefon': customerData.Telefon,
   'Produkty': this._formatOrderItems(orderData.cart),
@@ -141,12 +141,20 @@ const sheetData = {
   'Kod pocztowy': customerData['Kod pocztowy'],
   'Miasto': customerData.Miasto,
   'Status': 'Oczekujące',
+  // Original price before any discounts
   'Suma': `${originalTotal.toFixed(2)} PLN`,
+  // Add new column for discount applied status
+  'Czy naliczono rabat': discountAmount > 0 ? 'Tak' : 'Nie',
+  // Discount amount if any
   'Rabat': discountAmount ? `${discountAmount.toFixed(2)} PLN` : '0.00 PLN',
-  'Suma po rabacie': `${finalTotal.toFixed(2)} PLN`,
+  // Price after discount but before shipping
+  'Suma po rabacie': `${(originalTotal - discountAmount).toFixed(2)} PLN`,
+  // Shipping method and cost
   'Metoda dostawy': orderData.shipping || 'DPD',
-  'Kurier': orderData.shipping || 'DPD',
+  'Wysyłka': orderData.shipping || 'DPD', // Add shipping information
   'Koszt dostawy': '15.00 PLN',
+  // Final total including discount and shipping
+  'Suma końcowa': `${finalTotal.toFixed(2)} PLN`,
   'Uwagi': orderData.notes || '-',
   'Firma': customerData.Firma || '-'
 };
@@ -154,7 +162,11 @@ const sheetData = {
 console.log('Sheet data prepared:', {
   orderNumber,
   payuId: payuResponse.orderId,
-  status: 'Oczekujące'
+  status: 'Oczekujące',
+  subtotal: originalTotal,
+  discount: discountAmount,
+  shipping: orderData.shipping,
+  finalTotal
 });
   
       if (isAuthenticated && userId) {
