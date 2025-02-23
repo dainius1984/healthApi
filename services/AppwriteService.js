@@ -11,30 +11,28 @@ class AppwriteService {
     this.databases = new Databases(this.client);
   }
 
-  _formatItems(items) {
-    if (!Array.isArray(items)) return '';
-    return items
-      .map(item => `${item.n || item.name} (${item.q || item.quantity}x)`)
-      .join(', ')
-      .substring(0, 499); // Ensure we stay under 500 chars
+  _formatItemsToJsonString(items) {
+    if (!Array.isArray(items)) return '[]';
+    const formattedItems = items.map(item => ({
+      id: item.id || item.name.toLowerCase().replace(/[^a-z0-9]/g, ''),
+      n: item.name || item.n,
+      p: parseFloat(item.price || item.p),
+      q: parseInt(item.quantity || item.q),
+      image: item.image || `/img/products/${item.id || item.name.toLowerCase().replace(/[^a-z0-9]/g, '')}.png`
+    }));
+    return JSON.stringify(formattedItems);
   }
 
   async storeOrder(orderData) {
     try {
-      console.log('AppwriteService - Attempting to store order:', {
-        orderNumber: orderData.orderNumber,
-        userId: orderData.userId
-      });
-      
-      // Format items as a string
-      const itemsString = this._formatItems(orderData.items);
+      console.log('AppwriteService - Storing order:', orderData.orderNumber);
       
       const documentData = {
         orderNumber: orderData.orderNumber,
         userId: orderData.userId,
         createdAt: new Date().toISOString(),
         total: orderData.total.toString(),
-        items: itemsString, // Now a formatted string
+        items: this._formatItemsToJsonString(orderData.items),
         subtotal: orderData.subtotal?.toString() || '0',
         discountAmount: orderData.discountAmount?.toString() || '0',
         shippingCost: orderData.shippingDetails?.cost?.toString() || '0',
@@ -45,7 +43,7 @@ class AppwriteService {
         shipping: orderData.shippingDetails?.method || 'DPD',
         discountApplied: !!orderData.discountApplied,
         payuOrderId: orderData.payuOrderId || '',
-        status: orderData.status || 'pending'
+        status: orderData.status || 'Oczekujące'
       };
 
       const document = await this.databases.createDocument(
@@ -55,7 +53,6 @@ class AppwriteService {
         documentData
       );
       
-      console.log('AppwriteService - Order stored successfully:', document.$id);
       return document;
     } catch (error) {
       console.error('AppwriteService - Store order error:', error);
@@ -65,10 +62,7 @@ class AppwriteService {
 
   async updateOrderStatus(orderId, status) {
     try {
-      console.log('AppwriteService - Attempting to update order status:', {
-        payuOrderId: orderId,
-        newStatus: status
-      });
+      console.log('AppwriteService - Updating status for order:', orderId);
 
       const statusMapping = {
         'PAID': 'Opłacone',
@@ -82,48 +76,43 @@ class AppwriteService {
 
       const mappedStatus = statusMapping[status.toUpperCase()] || status;
 
-      // First try to find by payuOrderId
+      // Try to find the order by orderNumber first
       let documents = await this.databases.listDocuments(
         process.env.APPWRITE_DATABASE_ID,
         process.env.APPWRITE_ORDERS_COLLECTION_ID,
-        [Query.equal('payuOrderId', orderId)]
+        [Query.equal('orderNumber', orderId)]
       );
 
-      // If not found by payuOrderId, try orderNumber
+      // If not found, try payuOrderId
       if (!documents?.documents?.length) {
         documents = await this.databases.listDocuments(
           process.env.APPWRITE_DATABASE_ID,
           process.env.APPWRITE_ORDERS_COLLECTION_ID,
-          [Query.equal('orderNumber', orderId)]
+          [Query.equal('payuOrderId', orderId)]
         );
       }
 
       if (documents?.documents?.length > 0) {
         const document = documents.documents[0];
         
-        const updateData = {
-          status: mappedStatus,
-          lastUpdated: new Date().toISOString(),
-          statusUpdatedAt: new Date().toISOString()
-        };
-
         await this.databases.updateDocument(
           process.env.APPWRITE_DATABASE_ID,
           process.env.APPWRITE_ORDERS_COLLECTION_ID,
           document.$id,
-          updateData
+          {
+            status: mappedStatus,
+            statusUpdatedAt: new Date().toISOString()
+          }
         );
         
-        console.log('AppwriteService - Order status updated successfully:', {
-          orderId,
+        console.log('AppwriteService - Status updated:', {
           orderNumber: document.orderNumber,
-          oldStatus: document.status,
           newStatus: mappedStatus
         });
         return true;
       }
       
-      console.log('AppwriteService - No order found with ID:', orderId);
+      console.log('AppwriteService - Order not found:', orderId);
       return false;
     } catch (error) {
       console.error('AppwriteService - Update status error:', error);

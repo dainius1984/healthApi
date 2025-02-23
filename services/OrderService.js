@@ -54,45 +54,44 @@ class OrderService {
 
   async updateOrderStatus(orderId, status, extOrderId) {
     try {
-      console.log('Attempting to update order status:', {
+      console.log('Updating order status:', {
         orderId,
         status,
         extOrderId
       });
 
-      // First try to update in Appwrite (for logged-in users)
+      // Try to update in Appwrite first
       try {
-        const updated = await AppwriteService.updateOrderStatus(orderId, status);
+        // Try with orderNumber first
+        let updated = await AppwriteService.updateOrderStatus(extOrderId || orderId, status);
         if (updated) {
-          console.log('Successfully updated status in Appwrite for logged-in user');
-          return; // Exit if Appwrite update was successful
+          console.log('Status updated in Appwrite');
+          return;
+        }
+
+        // If that failed and we have both IDs, try with the other one
+        if (!updated && extOrderId && orderId !== extOrderId) {
+          updated = await AppwriteService.updateOrderStatus(orderId, status);
+          if (updated) {
+            console.log('Status updated in Appwrite using PayU orderId');
+            return;
+          }
         }
       } catch (error) {
-        console.log('Order not found in Appwrite - might be a guest order:', error);
+        console.log('Appwrite update failed:', error.message);
       }
 
-      // If Appwrite update failed or didn't find the order, try Google Sheets (for guests)
+      // If Appwrite update failed, try Google Sheets
       await GoogleSheetsService.updateOrderStatus(orderId, status, extOrderId);
-      console.log('Successfully updated status in Google Sheets for guest user');
+      console.log('Status updated in Google Sheets');
 
     } catch (error) {
-      console.error('Order status update error:', error);
+      console.error('Order status update failed:', error);
       throw error;
     }
   }
 
   async createOrder(orderData, customerData, isAuthenticated, userId, ip) {
-    console.log('Processing order data:', {
-      orderItems: orderData.items,
-      cart: orderData.cart,
-      subtotal: orderData.subtotal,
-      total: orderData.total,
-      discountAmount: orderData.discountAmount,
-      discountApplied: orderData.discountApplied,
-      isAuthenticated,
-      userId
-    });
-    
     try {
       const orderDate = new Date();
       const orderNumber = orderData.orderNumber || 
@@ -102,7 +101,7 @@ class OrderService {
       const discountAmount = this._sanitizeTotal(orderData.discountAmount || 0);
       const finalTotal = this._sanitizeTotal(orderData.total);
 
-      // First create PayU order
+      // Create PayU order first
       const payuOrderData = orderDataBuilder.buildOrderData(
         {
           orderNumber,
@@ -114,37 +113,30 @@ class OrderService {
         ip || '127.0.0.1'
       );
 
-      console.log('Sending order to PayU:', {
-        orderNumber,
-        total: finalTotal,
-        discountApplied: !!discountAmount
-      });
-
-      // Get PayU response first
       const payuResponse = await PayUOrderService.createOrder(payuOrderData);
       
-      console.log('PayU Response received:', {
-        orderId: payuResponse.orderId,
-        status: payuResponse.status,
-        extOrderId: payuResponse.extOrderId
+      console.log('PayU order created:', {
+        orderNumber,
+        payuOrderId: payuResponse.orderId
       });
 
       if (isAuthenticated && userId) {
         // Store order in Appwrite for authenticated users
-        const formattedItems = orderData.cart.map(item => 
-          `${item.name} (${item.quantity}x) - ${parseFloat(item.price).toFixed(2)} PLN`
-        ).join(', ');
-      
         const appwriteOrderData = {
           userId,
           orderNumber: orderNumber,
           payuOrderId: payuResponse.orderId,
-          payuExtOrderId: payuResponse.extOrderId,
           status: 'Oczekujące',
           total: finalTotal,
           subtotal: originalTotal,
           discountAmount: discountAmount,
-          items: formattedItems.substring(0, 499), // Ensure it stays under 500 chars
+          items: orderData.cart.map(item => ({
+            id: item.id || item.name.toLowerCase().replace(/[^a-z0-9]/g, ''),
+            n: item.name,
+            p: parseFloat(item.price),
+            q: parseInt(item.quantity),
+            image: item.image || `/img/products/${item.id || item.name.toLowerCase().replace(/[^a-z0-9]/g, '')}.png`
+          })),
           customerData: {
             Imie: customerData.Imie,
             Nazwisko: customerData.Nazwisko,
@@ -163,17 +155,9 @@ class OrderService {
           discountApplied: !!discountAmount,
           createdAt: new Date().toISOString()
         };
-      
-        console.log('Storing authenticated user order in Appwrite:', {
-          orderNumber: appwriteOrderData.orderNumber,
-          payuOrderId: appwriteOrderData.payuOrderId,
-          payuExtOrderId: appwriteOrderData.payuExtOrderId,
-          items: appwriteOrderData.items,
-          status: appwriteOrderData.status
-        });
-      
+
         await AppwriteService.storeOrder(appwriteOrderData);
-        console.log('Order successfully stored in Appwrite');
+        console.log('Order stored in Appwrite:', orderNumber);
       } else {
         // Store order in Google Sheets for guest users
         const sheetData = {
@@ -194,11 +178,11 @@ class OrderService {
           'Uwagi': orderData.notes || '-',
           'Produkty': this._formatOrderItems(orderData.cart)
         };
-      
-        console.log('Saving order to Google Sheets (guest user)');
+
         await GoogleSheetsService.addRow(sheetData);
-        console.log('Guest order saved to sheets with PayU ID:', payuResponse.orderId);
+        console.log('Guest order saved to sheets:', orderNumber);
       }
+
       return {
         success: true,
         redirectUrl: payuResponse.redirectUrl,
@@ -208,7 +192,7 @@ class OrderService {
         discountApplied: !!discountAmount
       };
     } catch (error) {
-      console.error('Order creation error:', error);
+      console.error('Order creation failed:', error);
       throw error;
     }
   }
