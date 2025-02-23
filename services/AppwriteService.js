@@ -101,7 +101,6 @@ class AppwriteService {
           document.$id,
           {
             status: mappedStatus,
-            statusUpdatedAt: new Date().toISOString()
           }
         );
         
