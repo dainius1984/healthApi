@@ -131,6 +131,10 @@ class OrderService {
 
       if (isAuthenticated && userId) {
         // Store order in Appwrite for authenticated users
+        const formattedItems = orderData.cart.map(item => 
+          `${item.name} (${item.quantity}x) - ${parseFloat(item.price).toFixed(2)} PLN`
+        ).join(', ');
+      
         const appwriteOrderData = {
           userId,
           orderNumber: orderNumber,
@@ -140,13 +144,7 @@ class OrderService {
           total: finalTotal,
           subtotal: originalTotal,
           discountAmount: discountAmount,
-          items: orderData.cart.map(item => ({
-            id: item.id || item.name.toLowerCase().replace(/[^a-z0-9]/g, ''),
-            n: item.name,
-            p: parseFloat(item.price),
-            q: item.quantity,
-            image: item.image || `/img/products/${item.id || item.name.toLowerCase().replace(/[^a-z0-9]/g, '')}.png`
-          })),
+          items: formattedItems.substring(0, 499), // Ensure it stays under 500 chars
           customerData: {
             Imie: customerData.Imie,
             Nazwisko: customerData.Nazwisko,
@@ -165,7 +163,7 @@ class OrderService {
           discountApplied: !!discountAmount,
           createdAt: new Date().toISOString()
         };
-
+      
         console.log('Storing authenticated user order in Appwrite:', {
           orderNumber: appwriteOrderData.orderNumber,
           payuOrderId: appwriteOrderData.payuOrderId,
@@ -173,7 +171,7 @@ class OrderService {
           items: appwriteOrderData.items,
           status: appwriteOrderData.status
         });
-
+      
         await AppwriteService.storeOrder(appwriteOrderData);
         console.log('Order successfully stored in Appwrite');
       } else {
@@ -196,12 +194,11 @@ class OrderService {
           'Uwagi': orderData.notes || '-',
           'Produkty': this._formatOrderItems(orderData.cart)
         };
-
+      
         console.log('Saving order to Google Sheets (guest user)');
         await GoogleSheetsService.addRow(sheetData);
         console.log('Guest order saved to sheets with PayU ID:', payuResponse.orderId);
       }
-
       return {
         success: true,
         redirectUrl: payuResponse.redirectUrl,
