@@ -27,6 +27,10 @@ class AppwriteService {
     try {
       console.log('AppwriteService - Storing order:', orderData.orderNumber);
       
+      // Log shipping information explicitly for debugging
+      const shippingMethod = orderData.shippingDetails?.method || 'DPD';
+      console.log('AppwriteService - Using shipping method:', shippingMethod);
+      
       const documentData = {
         orderNumber: orderData.orderNumber,
         userId: orderData.userId,
@@ -40,7 +44,7 @@ class AppwriteService {
         lastName: orderData.customerData?.Nazwisko || '',
         email: orderData.customerData?.Email || '',
         phone: orderData.customerData?.Telefon || '',
-        shipping: orderData.shippingDetails?.method || 'DPD',
+        shipping: shippingMethod, // Use the explicit shipping method
         discountApplied: !!orderData.discountApplied,
         payuOrderId: orderData.payuOrderId || '',
         status: orderData.status || 'Oczekujące'
@@ -53,6 +57,7 @@ class AppwriteService {
         documentData
       );
       
+      console.log('AppwriteService - Order stored successfully with shipping:', shippingMethod);
       return document;
     } catch (error) {
       console.error('AppwriteService - Store order error:', error);
@@ -106,6 +111,7 @@ class AppwriteService {
         
         console.log('AppwriteService - Status updated:', {
           orderNumber: document.orderNumber,
+          shipping: document.shipping, // Log shipping for debugging
           newStatus: mappedStatus
         });
         return true;

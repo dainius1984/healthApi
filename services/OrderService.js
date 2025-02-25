@@ -101,13 +101,18 @@ class OrderService {
       const discountAmount = this._sanitizeTotal(orderData.discountAmount || 0);
       const finalTotal = this._sanitizeTotal(orderData.total);
 
+      // Extract and normalize shipping method
+      const shippingMethod = orderData.shipping || 'DPD';
+      
+      console.log('Creating order with shipping method:', shippingMethod);
+
       // Create PayU order first
       const payuOrderData = orderDataBuilder.buildOrderData(
         {
           orderNumber,
           cart: orderData.cart,
           total: finalTotal,
-          shipping: orderData.shipping
+          shipping: shippingMethod // Pass explicit shipping method
         },
         customerData,
         ip || '127.0.0.1'
@@ -117,7 +122,8 @@ class OrderService {
       
       console.log('PayU order created:', {
         orderNumber,
-        payuOrderId: payuResponse.orderId
+        payuOrderId: payuResponse.orderId,
+        shippingMethod // Log shipping method for debugging
       });
 
       if (isAuthenticated && userId) {
@@ -149,13 +155,14 @@ class OrderService {
             Uwagi: orderData.notes || ''
           },
           shippingDetails: {
-            method: orderData.shipping || 'DPD',
+            method: shippingMethod, // Use normalized shipping method
             cost: '15.00'
           },
           discountApplied: !!discountAmount,
           createdAt: new Date().toISOString()
         };
 
+        console.log('Storing order in Appwrite with shipping:', shippingMethod);
         await AppwriteService.storeOrder(appwriteOrderData);
         console.log('Order stored in Appwrite:', orderNumber);
       } else {
@@ -166,7 +173,7 @@ class OrderService {
           'Status': 'Oczekujące',
           'Czy naliczono rabat': discountAmount > 0 ? 'Tak' : 'Nie',
           'Suma': `${finalTotal.toFixed(2)} PLN`,
-          'Wysylka': orderData.shipping || 'DPD',
+          'Wysylka': shippingMethod, // Use normalized shipping method for sheets too
           'Imie': customerData.Imie,
           'Nazwisko': customerData.Nazwisko,
           'Firma': customerData.Firma || '-',
@@ -179,6 +186,7 @@ class OrderService {
           'Produkty': this._formatOrderItems(orderData.cart)
         };
 
+        console.log('Storing guest order in Google Sheets with shipping:', shippingMethod);
         await GoogleSheetsService.addRow(sheetData);
         console.log('Guest order saved to sheets:', orderNumber);
       }
@@ -189,7 +197,8 @@ class OrderService {
         orderId: payuResponse.orderId,
         orderNumber,
         total: finalTotal,
-        discountApplied: !!discountAmount
+        discountApplied: !!discountAmount,
+        shipping: shippingMethod // Include shipping in response for confirmation
       };
     } catch (error) {
       console.error('Order creation failed:', error);
