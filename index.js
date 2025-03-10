@@ -4,6 +4,7 @@ const session = require('express-session');
 const config = require('./config/config');
 const OrderService = require('./services/OrderService');
 const PayUWebhookHandler = require('./services/PayUWebhookHandler');
+const shippingRoutes = require('./routes/shipping');
 
 // Validate environment variables before starting
 config.validateEnvVars();
@@ -84,6 +85,9 @@ app.post('/api/payu-webhook', async (req, res) => {
     });
   }
 });
+
+// Register shipping routes
+app.use('/api/shipping', shippingRoutes);
 
 app.use(errorHandler);
 
