@@ -7,6 +7,16 @@ class InPostService {
   constructor() {
     this.apiUrl = 'https://api-shipx-pl.easypack24.net/v1';
     this.token = process.env.INPOST_API_TOKEN;
+    
+    if (!this.token) {
+      console.error('⚠️ WARNING: INPOST_API_TOKEN is not set!');
+    } else {
+      console.log('🔑 InPost API token is configured', {
+        length: this.token.length,
+        firstChars: this.token.substring(0, 3) + '...',
+        lastChars: '...' + this.token.substring(this.token.length - 3)
+      });
+    }
   }
 
   /**
@@ -98,15 +108,82 @@ class InPostService {
     try {
       const payload = this.createShipmentPayload(orderData);
       
+      // Log the request payload
+      console.log('🚚 INPOST API REQUEST:', {
+        url: `${this.apiUrl}/shipments`,
+        method: 'POST',
+        orderNumber: orderData.orderNumber,
+        payload: JSON.stringify(payload),
+        hasToken: !!this.token,
+        tokenLength: this.token ? this.token.length : 0
+      });
+      
       const response = await axios.post(
         `${this.apiUrl}/shipments`, 
         payload, 
         { headers: this.getHeaders() }
       );
       
+      // Log the complete response
+      console.log('✅ INPOST API RESPONSE SUCCESS:', {
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers,
+        data: JSON.stringify(response.data, null, 2)
+      });
+      
+      // Log specific important fields
+      console.log('📦 INPOST SHIPMENT CREATED:', {
+        orderNumber: orderData.orderNumber,
+        shipmentId: response.data.id,
+        trackingNumber: response.data.tracking_number,
+        status: response.data.status,
+        labelUrl: response.data.href,
+        createdAt: new Date().toISOString()
+      });
+      
       return response.data;
     } catch (error) {
-      console.error('InPost ShipX API error:', error.response?.data || error.message);
+      // Log detailed error information
+      console.error('❌ INPOST API ERROR:', {
+        message: error.message,
+        name: error.name,
+        stack: error.stack
+      });
+      
+      if (error.response) {
+        // The request was made and the server responded with a status code
+        // that falls out of the range of 2xx
+        console.error('📄 INPOST API ERROR RESPONSE:', {
+          status: error.response.status,
+          statusText: error.response.statusText,
+          headers: error.response.headers,
+          data: JSON.stringify(error.response.data, null, 2)
+        });
+      } else if (error.request) {
+        // The request was made but no response was received
+        console.error('🔄 INPOST API NO RESPONSE:', {
+          request: error.request._currentUrl || error.request.path,
+          method: error.request.method
+        });
+      } else {
+        // Something happened in setting up the request that triggered an Error
+        console.error('⚠️ INPOST API REQUEST SETUP ERROR:', error.message);
+      }
+      
+      // Log the request configuration that caused the error
+      if (error.config) {
+        console.error('🔧 INPOST API REQUEST CONFIG:', {
+          url: error.config.url,
+          method: error.config.method,
+          headers: {
+            ...error.config.headers,
+            Authorization: 'Bearer [REDACTED]' // Don't log the actual token
+          },
+          data: error.config.data
+        });
+      }
+      
       throw error;
     }
   }
