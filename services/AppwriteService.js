@@ -76,7 +76,7 @@ class AppwriteService {
         'CANCELLED': 'Anulowane',
         'PENDING': 'Oczekujące',
         'WAITING': 'Oczekujące',
-        'REJECTED': 'Odrzucone'
+        'REJECTED': 'Odrzucone' 
       };
 
       const mappedStatus = statusMapping[status.toUpperCase()] || status;
