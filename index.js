@@ -95,4 +95,43 @@ app.use(errorHandler);
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`);
   console.log('Environment check:', config.getEnvironmentStatus());
+
+  // Log all registered routes to check if InPost endpoints are properly registered
+  console.log('🔍 CHECKING REGISTERED ROUTES:');
+  app._router.stack.forEach((middleware) => {
+    if (middleware.route) {
+      // Routes registered directly on the app
+      const path = middleware.route.path;
+      const methods = Object.keys(middleware.route.methods)
+        .filter(method => middleware.route.methods[method])
+        .map(method => method.toUpperCase())
+        .join(', ');
+      
+      console.log(`📌 ${methods} ${path}`);
+    } else if (middleware.name === 'router') {
+      // Routes registered via router
+      middleware.handle.stack.forEach((handler) => {
+        if (handler.route) {
+          const path = handler.route.path;
+          const methods = Object.keys(handler.route.methods)
+            .filter(method => handler.route.methods[method])
+            .map(method => method.toUpperCase())
+            .join(', ');
+          
+          // Check if this is a shipping route
+          if (path.includes('shipping') || path.includes('inpost')) {
+            console.log(`📦 SHIPPING ROUTE: ${methods} ${path}`);
+          } else {
+            console.log(`📌 ${methods} ${path}`);
+          }
+        }
+      });
+    }
+  });
+
+  // Log InPost API token status
+  console.log('🔑 INPOST API TOKEN STATUS:', {
+    isConfigured: !!process.env.INPOST_API_TOKEN,
+    length: process.env.INPOST_API_TOKEN ? process.env.INPOST_API_TOKEN.length : 0
+  });
 });
