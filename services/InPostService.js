@@ -105,6 +105,19 @@ class InPostService {
    * @returns {Promise<Object>} ShipX API response
    */
   async createShipment(orderData) {
+    console.log('📦 Shipment creation request received:', {
+      endpoint: req.originalUrl,
+      method: req.method,
+      orderNumber: req.body.orderNumber,
+      recipient: {
+        ...req.body.recipient,
+        email: req.body.recipient?.email ? '***@***' : undefined, // Redact email for privacy
+        phone: req.body.recipient?.phone ? '***' : undefined // Redact phone for privacy
+      },
+      packageDetails: req.body.packageDetails,
+      timestamp: new Date().toISOString()
+    });
+    
     try {
       const payload = this.createShipmentPayload(orderData);
       
