@@ -77,32 +77,26 @@ class InPostService {
     const payload = {
       receiver: receiverData,
       service: isLockerDelivery ? 'inpost_locker_standard' : 'inpost_courier_standard',
-      reference: orderNumber || 'FB-ORDER'
+      reference: orderNumber || 'FB-ORDER',
+      // Always use array format for parcels
+      parcels: [{
+        template: "small",
+        is_non_standard: false
+      }]
     };
     
-    // For locker delivery, use the template format
+    // For locker delivery, add custom attributes
     if (isLockerDelivery) {
-      // For Paczkomat deliveries, sending_method is required
       payload.custom_attributes = {
         sending_method: "dispatch_order",
         target_point: recipient.paczkomatId
       };
-      
-      // Try both formats to see which one works (parcels as object vs array)
-      // Format 1: parcels as an object (from your example)
-      payload.parcels = {
-        template: "small"
-      };
     } else {
-      // For courier delivery
-      payload.parcels = [{
-        template: "small",
-        is_non_standard: false,
-        weight: {
-          amount: (packageDetails.weight || 1.0).toString(),
-          unit: "kg"
-        }
-      }];
+      // For courier delivery, add address and weight
+      payload.parcels[0].weight = {
+        amount: (packageDetails.weight || 1.0).toString(),
+        unit: "kg"
+      };
       
       // Add address for courier
       payload.receiver.address = {
@@ -151,31 +145,38 @@ class InPostService {
         organizationId: this.organizationId
       });
       
-      const response = await axios.post(
-        `${this.apiUrl}/organizations/${this.organizationId}/shipments`, 
-        payload, 
-        { headers: this.getHeaders() }
-      );
-      
-      // Log the complete response
-      console.log('✅ INPOST API RESPONSE SUCCESS:', {
-        status: response.status,
-        statusText: response.statusText,
-        headers: response.headers,
-        data: JSON.stringify(response.data, null, 2)
-      });
-      
-      // Log specific important fields
-      console.log('📦 INPOST SHIPMENT CREATED:', {
-        orderNumber: orderData.orderNumber,
-        shipmentId: response.data.id,
-        trackingNumber: response.data.tracking_number,
-        status: response.data.status,
-        labelUrl: response.data.href,
-        createdAt: new Date().toISOString()
-      });
-      
-      return response.data;
+      try {
+        const response = await axios.post(
+          `${this.apiUrl}/organizations/${this.organizationId}/shipments`, 
+          payload, 
+          { headers: this.getHeaders() }
+        );
+        
+        // Log the complete response
+        console.log('✅ INPOST API RESPONSE SUCCESS:', {
+          status: response.status,
+          statusText: response.statusText,
+          headers: response.headers,
+          data: JSON.stringify(response.data, null, 2)
+        });
+        
+        // Log specific important fields
+        console.log('📦 INPOST SHIPMENT CREATED:', {
+          orderNumber: orderData.orderNumber,
+          shipmentId: response.data.id,
+          trackingNumber: response.data.tracking_number,
+          status: response.data.status,
+          labelUrl: response.data.href,
+          createdAt: new Date().toISOString()
+        });
+        
+        return response.data;
+      } catch (firstError) {
+        console.log('First attempt failed, trying minimal payload as fallback');
+        
+        // Try the minimal payload as a last resort
+        return await this.createShipmentWithMinimalPayload(orderData);
+      }
     } catch (error) {
       // Log detailed error information
       console.error('❌ INPOST API ERROR:', {
@@ -185,8 +186,16 @@ class InPostService {
       });
       
       // Log the validation details specifically
-      if (error.response && error.response.data && error.response.data.details) {
-        console.error('❌ VALIDATION DETAILS:', JSON.stringify(error.response.data.details, null, 2));
+      if (error.response && error.response.data) {
+        console.error('Full error response data:', JSON.stringify(error.response.data, null, 2));
+        
+        if (error.response.data.details) {
+          if (typeof error.response.data.details === 'object') {
+            console.error('Validation details:', JSON.stringify(error.response.data.details, null, 2));
+          } else {
+            console.error('Validation details (raw):', error.response.data.details);
+          }
+        }
       }
       
       if (error.response) {
@@ -222,6 +231,57 @@ class InPostService {
         });
       }
       
+      throw error;
+    }
+  }
+
+  /**
+   * Create a shipment with minimal payload for InPost ShipX API
+   * @param {Object} orderData - Order data from frontend
+   * @returns {Promise<Object>} ShipX API response
+   */
+  async createShipmentWithMinimalPayload(orderData) {
+    try {
+      const { recipient, orderNumber } = orderData;
+      
+      // Create a minimal payload based exactly on the successful example
+      const minimalPayload = {
+        receiver: {
+          first_name: recipient.firstName || 'Klient',
+          last_name: recipient.lastName || 'Sklepu',
+          email: recipient.email || 'klient@familybalance.pl',
+          phone: (recipient.phone || '500000000').toString().replace(/\s+/g, '')
+        },
+        parcels: [{
+          template: "small"
+        }],
+        custom_attributes: {
+          sending_method: "dispatch_order",
+          target_point: recipient.paczkomatId
+        },
+        service: "inpost_locker_standard",
+        reference: orderNumber || 'FB-ORDER'
+      };
+      
+      console.log('🚚 TRYING MINIMAL PAYLOAD:', JSON.stringify(minimalPayload, null, 2));
+      
+      const response = await axios.post(
+        `${this.apiUrl}/organizations/${this.organizationId}/shipments`, 
+        minimalPayload, 
+        { headers: this.getHeaders() }
+      );
+      
+      console.log('✅ MINIMAL PAYLOAD SUCCESS:', {
+        status: response.status,
+        data: JSON.stringify(response.data, null, 2)
+      });
+      
+      return response.data;
+    } catch (error) {
+      console.error('❌ MINIMAL PAYLOAD ERROR:', {
+        message: error.message,
+        response: error.response?.data
+      });
       throw error;
     }
   }
