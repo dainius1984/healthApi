@@ -10,4 +10,11 @@ const router = express.Router();
  */
 router.post('/create', ShippingController.createShipment);
 
+/**
+ * @route POST /api/shipping/inpost/create
+ * @desc Create a shipment with InPost ShipX API
+ * @access Private
+ */
+router.post('/inpost/create', ShippingController.createShipment);
+
 module.exports = router; 
