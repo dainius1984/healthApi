@@ -9,6 +9,7 @@ const shippingRoutes = require('./routes/shipping');
 // Validate environment variables before starting
 config.validateEnvVars();
 
+
 const app = express();
 const PORT = process.env.PORT || 10000;
 
