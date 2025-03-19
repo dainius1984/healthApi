@@ -34,7 +34,10 @@ class InPostService {
   getHeaders() {
     return {
       'Authorization': `Bearer ${this.token}`,
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
+      'Accept-Language': 'en_GB', // For English error messages
+      'X-User-Agent': 'FamilyBalance-Backend/1.0',
+      'X-Request-ID': `fb-inpost-${Date.now()}`
     };
   }
 
@@ -135,7 +138,7 @@ class InPostService {
       const payload = this.createShipmentPayload(orderData);
       
       // Log the request payload
-      console.log('🚚 INPOST API REQUEST:', {
+      console.log('�� INPOST API REQUEST:', {
         url: `${this.apiUrl}/organizations/${this.organizationId}/shipments`,
         method: 'POST',
         orderNumber: orderData.orderNumber,
