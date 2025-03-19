@@ -3,171 +3,113 @@ const { GoogleSpreadsheet } = require('google-spreadsheet');
 class GoogleSheetsService {
   constructor() {
     this.doc = new GoogleSpreadsheet(process.env.SPREADSHEET_ID);
-    this.initialized = false;
   }
 
   async init() {
-    if (this.initialized) return;
+    const formattedKey = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n');
+    if (!formattedKey || !process.env.GOOGLE_CLIENT_EMAIL) {
+      throw new Error('Google Sheets credentials are missing');
+    }
 
-    const formattedKey = this._formatPrivateKey(process.env.GOOGLE_PRIVATE_KEY);
-    this._validateCredentials(formattedKey, process.env.GOOGLE_CLIENT_EMAIL);
+    await this.doc.useServiceAccountAuth({
+      client_email: process.env.GOOGLE_CLIENT_EMAIL,
+      private_key: formattedKey,
+    });
 
-    await this._authenticateServiceAccount(formattedKey, process.env.GOOGLE_CLIENT_EMAIL);
     await this.doc.loadInfo();
-    this.initialized = true;
   }
 
   async addRow(data) {
     try {
       await this.init();
-      const sheet = this._getMainSheet();
+      const sheet = this.doc.sheetsByIndex[0];
       
-      this._logAddingRow(data);
-      const formattedData = this._formatRowData(data);
+      console.log('Adding row to sheets:', {
+        orderNumber: data['Numer zamowienia'],
+        date: data['Data'],
+        status: data['Status'],
+        discount: data['Czy naliczono rabat'],
+        total: data['Suma'],
+      });
+  
+      const formattedData = {
+        ...data,
+        'Numer zamowienia': `="${data['Numer zamowienia']}"`,
+        'Data': `="${data['Data']}"`,
+        'Produkty': data['Produkty'],
+      };
+  
       const addedRow = await sheet.addRow(formattedData);
-      
-      this._logRowAdded(data);
+      console.log('Successfully added row to sheet:', {
+        orderNumber: data['Numer zamowienia'],
+        date: data['Data'],
+        total: data['Suma'],
+      });
       return addedRow;
     } catch (error) {
-      this._handleError('Sheet request', error);
+      console.error('Sheet request error:', error);
+      throw new Error(`Failed to process sheet request: ${error.message}`);
     }
   }
 
   async updateOrderStatus(orderId, status, extOrderId) {
     try {
       await this.init();
-      const sheet = this._getMainSheet();
+      const sheet = this.doc.sheetsByIndex[0];
       const rows = await sheet.getRows();
       
-      this._logStatusUpdateAttempt(orderId, status, extOrderId, rows.length);
-      const orderRow = this._findOrderRow(rows, extOrderId);
+      console.log('Attempting to update order status:', {
+        payuOrderId: orderId,
+        status,
+        orderNumber: extOrderId,
+        totalRows: rows.length,
+      });
+      
+      const orderRow = rows.find(row => {
+        const sheetOrderNumber = row['Numer zamowienia']?.replace(/[="]/g, '');
+        const matches = sheetOrderNumber === extOrderId;
+        
+        console.log('Comparing row:', {
+          sheetOrderNumber,
+          orderToFind: extOrderId,
+          matches,
+        });
+        
+        return matches;
+      });
   
       if (orderRow) {
-        await this._updateRowStatus(orderRow, status, extOrderId);
-        return true;
+        const statusMapping = {
+          'PAID': 'Opłacone',
+          'CANCELLED': 'Anulowane',
+          'PENDING': 'Oczekujące',
+          'REJECTED': 'Odrzucone',
+        };
+  
+        const mappedStatus = statusMapping[status] || status;
+        orderRow['Status'] = mappedStatus;
+        await orderRow.save();
+        
+        console.log('Successfully updated order status:', {
+          orderNumber: extOrderId,
+          oldStatus: orderRow['Status'],
+          newStatus: mappedStatus,
+        });
       } else {
-        this._logOrderNotFound(extOrderId, orderId);
-        return false;
+        console.warn('Order not found in sheet:', {
+          searchedOrderNumber: extOrderId,
+          payuOrderId: orderId,
+        });
       }
     } catch (error) {
-      this._handleError('Update order status', error, { orderId, extOrderId, status });
+      console.error('Failed to update order status:', {
+        error: error.message,
+        orderId,
+        extOrderId,
+        status,
+      });
+      throw new Error(`Failed to update order status: ${error.message}`);
     }
-  }
-
-  // Private helper methods
-  _formatPrivateKey(key) {
-    if (!key) return null;
-    return key.replace(/\\n/g, '\n');
-  }
-
-  _validateCredentials(privateKey, clientEmail) {
-    if (!privateKey || !clientEmail) {
-      throw new Error('Google Sheets credentials are missing');
-    }
-  }
-
-  async _authenticateServiceAccount(privateKey, clientEmail) {
-    await this.doc.useServiceAccountAuth({
-      client_email: clientEmail,
-      private_key: privateKey,
-    });
-  }
-
-  _getMainSheet() {
-    return this.doc.sheetsByIndex[0];
-  }
-
-  _logAddingRow(data) {
-    console.log('Adding row to sheets:', {
-      orderNumber: data['Numer zamowienia'],
-      date: data['Data'],
-      status: data['Status'],
-      discount: data['Czy naliczono rabat'],
-      total: data['Suma'],
-    });
-  }
-
-  _formatRowData(data) {
-    return {
-      ...data,
-      'Numer zamowienia': `="${data['Numer zamowienia']}"`,
-      'Data': `="${data['Data']}"`,
-      'Produkty': data['Produkty'],
-    };
-  }
-
-  _logRowAdded(data) {
-    console.log('Successfully added row to sheet:', {
-      orderNumber: data['Numer zamowienia'],
-      date: data['Data'],
-      total: data['Suma'],
-    });
-  }
-
-  _logStatusUpdateAttempt(orderId, status, extOrderId, totalRows) {
-    console.log('Attempting to update order status:', {
-      payuOrderId: orderId,
-      status,
-      orderNumber: extOrderId,
-      totalRows,
-    });
-  }
-
-  _findOrderRow(rows, extOrderId) {
-    if (!extOrderId) return null;
-
-    console.log('Searching for order:', {
-      orderToFind: extOrderId,
-      totalRows: rows.length
-    });
-
-    const row = rows.find(row => {
-      const sheetOrderNumber = row['Numer zamowienia']?.replace(/[="]/g, '');
-      return sheetOrderNumber === extOrderId;
-    });
-
-    console.log('Search result:', {
-      orderToFind: extOrderId,
-      found: !!row
-    });
-
-    return row;
-  }
-
-  async _updateRowStatus(orderRow, status, extOrderId) {
-    const statusMapping = {
-      'PAID': 'Opłacone',
-      'CANCELLED': 'Anulowane',
-      'PENDING': 'Oczekujące',
-      'REJECTED': 'Odrzucone',
-    };
-
-    const oldStatus = orderRow['Status'];
-    const mappedStatus = statusMapping[status] || status;
-    orderRow['Status'] = mappedStatus;
-    await orderRow.save();
-    
-    console.log('Successfully updated order status:', {
-      orderNumber: extOrderId,
-      oldStatus,
-      newStatus: mappedStatus,
-    });
-  }
-
-  _logOrderNotFound(extOrderId, orderId) {
-    console.warn('Order not found in sheet:', {
-      searchedOrderNumber: extOrderId,
-      payuOrderId: orderId,
-    });
-  }
-
-  _handleError(operation, error, additionalContext = {}) {
-    console.error(`Failed to ${operation}:`, {
-      error: error.message,
-      stack: error.stack,
-      ...additionalContext
-    });
-    throw new Error(`Failed to ${operation}: ${error.message}`);
   }
 }
 
