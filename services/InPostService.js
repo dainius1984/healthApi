@@ -64,38 +64,37 @@ class InPostService {
     // Determine if this is a locker or courier delivery
     const isLockerDelivery = !!recipient.paczkomatId;
     
-    // Basic recipient data
+    // Basic recipient data - ensure all fields are strings
     const receiverData = {
       first_name: recipient.firstName || (recipient.name ? recipient.name.split(' ')[0] : 'Klient'),
       last_name: recipient.lastName || (recipient.name && recipient.name.split(' ').length > 1 ? 
         recipient.name.split(' ').slice(1).join(' ') : 'Sklepu'),
       email: recipient.email || 'klient@familybalance.pl',
-      phone: (recipient.phone || '500000000').toString()
+      phone: (recipient.phone || '500000000').toString().replace(/\s+/g, '') // Remove any spaces
     };
-    
-    // Add company_name if we have one
-    if (recipient.company) {
-      receiverData.company_name = recipient.company;
-    }
     
     // Create the base payload
     const payload = {
       receiver: receiverData,
-      parcels: {
-        template: "small" // Use template instead of dimensions for paczkomat
-      },
       service: isLockerDelivery ? 'inpost_locker_standard' : 'inpost_courier_standard',
       reference: orderNumber || 'FB-ORDER'
     };
     
-    // For locker delivery, set the custom_attributes
+    // For locker delivery, use the template format
     if (isLockerDelivery) {
+      // For Paczkomat deliveries, sending_method is required
       payload.custom_attributes = {
         sending_method: "dispatch_order",
         target_point: recipient.paczkomatId
       };
+      
+      // Try both formats to see which one works (parcels as object vs array)
+      // Format 1: parcels as an object (from your example)
+      payload.parcels = {
+        template: "small"
+      };
     } else {
-      // For courier delivery, add address and change parcels to array
+      // For courier delivery
       payload.parcels = [{
         template: "small",
         is_non_standard: false,
@@ -113,11 +112,6 @@ class InPostService {
         post_code: recipient.address?.postCode || '00-001',
         country_code: 'PL'
       };
-    }
-    
-    // Add sender info if available (optional)
-    if (orderData.sender) {
-      payload.sender = orderData.sender;
     }
     
     // Log the final payload
@@ -189,6 +183,11 @@ class InPostService {
         name: error.name,
         stack: error.stack
       });
+      
+      // Log the validation details specifically
+      if (error.response && error.response.data && error.response.data.details) {
+        console.error('❌ VALIDATION DETAILS:', JSON.stringify(error.response.data.details, null, 2));
+      }
       
       if (error.response) {
         // The request was made and the server responded with a status code
