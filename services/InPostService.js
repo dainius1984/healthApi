@@ -7,6 +7,7 @@ class InPostService {
   constructor() {
     this.apiUrl = 'https://api-shipx-pl.easypack24.net/v1';
     this.token = process.env.INPOST_API_TOKEN;
+    this.organizationId = process.env.INPOST_ORGANIZATION_ID;
     
     if (!this.token) {
       console.error('⚠️ WARNING: INPOST_API_TOKEN is not set!');
@@ -16,6 +17,13 @@ class InPostService {
         firstChars: this.token.substring(0, 3) + '...',
         lastChars: '...' + this.token.substring(this.token.length - 3)
       });
+    }
+
+    // Log organization ID status
+    if (!this.organizationId) {
+      console.error('⚠️ WARNING: INPOST_ORGANIZATION_ID is not set!');
+    } else {
+      console.log('🏢 InPost Organization ID is configured:', this.organizationId);
     }
   }
 
@@ -59,25 +67,28 @@ class InPostService {
     
     const payload = {
       receiver: {
-        name: recipient.name,
         email: recipient.email,
-        phone: recipient.phone
+        phone: recipient.phone,
+        // Split name into first_name and last_name if provided as a single field
+        first_name: recipient.name ? recipient.name.split(' ')[0] : '',
+        last_name: recipient.name ? recipient.name.split(' ').slice(1).join(' ') : ''
       },
       parcels: [{
         dimensions: {
-          length: dimensions.length,
-          width: dimensions.width,
-          height: dimensions.height,
+          length: dimensions.length.toString(),
+          width: dimensions.width.toString(),
+          height: dimensions.height.toString(),
           unit: 'mm'
         },
         weight: {
-          amount: packageDetails.weight || 1.0,
+          amount: (packageDetails.weight || 1.0).toString(),
           unit: 'kg'
-        }
+        },
+        is_non_standard: false
       }],
       service: isLockerDelivery ? 'inpost_locker_standard' : 'inpost_courier_standard',
       reference: orderNumber,
-      end_of_week_collection: false
+      comments: orderData.comments || 'Zamówienie ze sklepu FamilyBalance'
     };
     
     // Add target point for locker delivery
@@ -121,16 +132,17 @@ class InPostService {
       
       // Log the request payload
       console.log('🚚 INPOST API REQUEST:', {
-        url: `${this.apiUrl}/shipments`,
+        url: `${this.apiUrl}/organizations/${this.organizationId}/shipments`,
         method: 'POST',
         orderNumber: orderData.orderNumber,
         payload: JSON.stringify(payload),
         hasToken: !!this.token,
-        tokenLength: this.token ? this.token.length : 0
+        tokenLength: this.token ? this.token.length : 0,
+        organizationId: this.organizationId
       });
       
       const response = await axios.post(
-        `${this.apiUrl}/shipments`, 
+        `${this.apiUrl}/organizations/${this.organizationId}/shipments`, 
         payload, 
         { headers: this.getHeaders() }
       );
