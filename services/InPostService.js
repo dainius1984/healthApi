@@ -60,52 +60,68 @@ class InPostService {
    */
   createShipmentPayload(orderData) {
     const { recipient, packageDetails, orderNumber } = orderData;
-    const dimensions = this.mapSizeToDimensions(packageDetails.size);
     
     // Determine if this is a locker or courier delivery
     const isLockerDelivery = !!recipient.paczkomatId;
     
-    const payload = {
-      receiver: {
-        email: recipient.email,
-        phone: recipient.phone,
-        // Split name into first_name and last_name if provided as a single field
-        first_name: recipient.name ? recipient.name.split(' ')[0] : '',
-        last_name: recipient.name ? recipient.name.split(' ').slice(1).join(' ') : ''
-      },
-      parcels: [{
-        dimensions: {
-          length: dimensions.length.toString(),
-          width: dimensions.width.toString(),
-          height: dimensions.height.toString(),
-          unit: 'mm'
-        },
-        weight: {
-          amount: (packageDetails.weight || 1.0).toString(),
-          unit: 'kg'
-        },
-        is_non_standard: false
-      }],
-      service: isLockerDelivery ? 'inpost_locker_standard' : 'inpost_courier_standard',
-      reference: orderNumber,
-      comments: orderData.comments || 'Zamówienie ze sklepu FamilyBalance'
+    // Basic recipient data
+    const receiverData = {
+      first_name: recipient.firstName || (recipient.name ? recipient.name.split(' ')[0] : 'Klient'),
+      last_name: recipient.lastName || (recipient.name && recipient.name.split(' ').length > 1 ? 
+        recipient.name.split(' ').slice(1).join(' ') : 'Sklepu'),
+      email: recipient.email || 'klient@familybalance.pl',
+      phone: (recipient.phone || '500000000').toString()
     };
     
-    // Add target point for locker delivery
+    // Add company_name if we have one
+    if (recipient.company) {
+      receiverData.company_name = recipient.company;
+    }
+    
+    // Create the base payload
+    const payload = {
+      receiver: receiverData,
+      parcels: {
+        template: "small" // Use template instead of dimensions for paczkomat
+      },
+      service: isLockerDelivery ? 'inpost_locker_standard' : 'inpost_courier_standard',
+      reference: orderNumber || 'FB-ORDER'
+    };
+    
+    // For locker delivery, set the custom_attributes
     if (isLockerDelivery) {
       payload.custom_attributes = {
+        sending_method: "dispatch_order",
         target_point: recipient.paczkomatId
       };
     } else {
-      // Add address for courier delivery
+      // For courier delivery, add address and change parcels to array
+      payload.parcels = [{
+        template: "small",
+        is_non_standard: false,
+        weight: {
+          amount: (packageDetails.weight || 1.0).toString(),
+          unit: "kg"
+        }
+      }];
+      
+      // Add address for courier
       payload.receiver.address = {
-        street: recipient.address.street,
-        building_number: recipient.address.buildingNumber,
-        city: recipient.address.city,
-        post_code: recipient.address.postCode,
+        street: recipient.address?.street || 'Nieznana',
+        building_number: recipient.address?.buildingNumber || '1',
+        city: recipient.address?.city || 'Warszawa',
+        post_code: recipient.address?.postCode || '00-001',
         country_code: 'PL'
       };
     }
+    
+    // Add sender info if available (optional)
+    if (orderData.sender) {
+      payload.sender = orderData.sender;
+    }
+    
+    // Log the final payload
+    console.log('Final InPost payload prepared:', JSON.stringify(payload, null, 2));
     
     return payload;
   }
