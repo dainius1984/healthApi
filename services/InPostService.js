@@ -42,6 +42,81 @@ class InPostService {
   }
 
   /**
+   * Check if a Paczkomat ID is valid by fetching point details
+   * @param {string} paczkomatId - The Paczkomat ID to check
+   * @returns {Promise<boolean>} True if valid, false otherwise
+   */
+  async isValidPaczkomatId(paczkomatId) {
+    try {
+      // First sanitize the ID 
+      const sanitizedId = this.sanitizePaczkomatId(paczkomatId);
+      
+      // Try to fetch the Paczkomat details
+      console.log(`Checking if Paczkomat ID '${sanitizedId}' is valid...`);
+      
+      const response = await axios.get(
+        `${this.apiUrl}/points/${sanitizedId}`,
+        { headers: this.getHeaders() }
+      );
+      
+      if (response.status === 200) {
+        console.log(`✅ Paczkomat ID '${sanitizedId}' is valid:`, {
+          name: response.data.name,
+          type: response.data.type,
+          status: response.data.status
+        });
+        return true;
+      }
+      
+      return false;
+    } catch (error) {
+      console.error(`❌ Invalid Paczkomat ID '${paczkomatId}':`, {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data
+      });
+      return false;
+    }
+  }
+
+  /**
+   * Search for Paczkomat points by postal code to help diagnose ID issues
+   * @param {string} postalCode - Postal code to search nearby (e.g. '00-001')
+   * @returns {Promise<Array>} List of nearby Paczkomat points
+   */
+  async findPaczkomatsByPostalCode(postalCode) {
+    try {
+      console.log(`Searching for Paczkomat points near postal code: ${postalCode}`);
+      
+      const response = await axios.get(
+        `${this.apiUrl}/points?type=parcel_locker&postal_code=${postalCode}`,
+        { headers: this.getHeaders() }
+      );
+      
+      if (response.data && response.data.items && response.data.items.length > 0) {
+        const points = response.data.items.map(item => ({
+          id: item.id, // This is the correct ID format
+          name: item.name,
+          address: `${item.address.line1}, ${item.address.line2 || ''}, ${item.address.post_code} ${item.address.city}`
+        }));
+        
+        console.log(`Found ${points.length} Paczkomat points near ${postalCode}:`, points);
+        return points;
+      }
+      
+      console.log(`No Paczkomat points found near postal code: ${postalCode}`);
+      return [];
+    } catch (error) {
+      console.error(`Error searching for Paczkomat points:`, {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data
+      });
+      return [];
+    }
+  }
+
+  /**
    * Map package size code (A/B/C) to dimensions in mm
    * @param {string} sizeCode - Size code (A, B, or C)
    * @returns {Object} Dimensions object with length, width, height in mm
@@ -54,6 +129,29 @@ class InPostService {
     };
     
     return sizeMap[sizeCode.toUpperCase()] || sizeMap['A']; // Default to A if invalid
+  }
+
+  /**
+   * Sanitize Paczkomat ID to ensure it's in the correct format
+   * @param {string} paczkomatId - The raw Paczkomat ID from frontend
+   * @returns {string} Sanitized Paczkomat ID
+   */
+  sanitizePaczkomatId(paczkomatId) {
+    if (!paczkomatId) return '';
+    
+    // If the ID already includes PL_ prefix, normalize it
+    let sanitized = paczkomatId.trim();
+    
+    // Some common patterns to fix
+    if (sanitized.startsWith('PL_')) {
+      // Remove PL_ prefix as InPost API might expect just the code
+      sanitized = sanitized.substring(3);
+    }
+    
+    // Log the sanitization
+    console.log(`Sanitized Paczkomat ID: "${paczkomatId}" -> "${sanitized}"`);
+    
+    return sanitized;
   }
 
   /**
@@ -76,32 +174,52 @@ class InPostService {
       phone: (recipient.phone || '500000000').toString().replace(/\s+/g, '') // Remove any spaces
     };
     
+    // Add company name if available
+    if (recipient.companyName) {
+      receiverData.company_name = recipient.companyName;
+    }
+    
     // Create the base payload
     const payload = {
       receiver: receiverData,
       service: isLockerDelivery ? 'inpost_locker_standard' : 'inpost_courier_standard',
       reference: orderNumber || 'FB-ORDER',
-      // Always use array format for parcels
-      parcels: [{
-        template: "small",
-        is_non_standard: false
-      }]
+      // Use an object instead of array for parcels as per the example
+      parcels: {
+        template: "small"
+      }
     };
+    
+    // Add insurance if available
+    if (packageDetails.insurance && packageDetails.insurance.amount) {
+      payload.insurance = {
+        amount: parseFloat(packageDetails.insurance.amount),
+        currency: packageDetails.insurance.currency || 'PLN'
+      };
+    }
+    
+    // Add COD (cash on delivery) if available
+    if (packageDetails.cod && packageDetails.cod.amount) {
+      payload.cod = {
+        amount: parseFloat(packageDetails.cod.amount),
+        currency: packageDetails.cod.currency || 'PLN'
+      };
+    }
     
     // For locker delivery, add custom attributes
     if (isLockerDelivery) {
+      // Sanitize the Paczkomat ID to ensure it's in the correct format
+      const sanitizedId = this.sanitizePaczkomatId(recipient.paczkomatId);
+      
       payload.custom_attributes = {
         sending_method: "dispatch_order",
-        target_point: recipient.paczkomatId
-      };
-    } else {
-      // For courier delivery, add address and weight
-      payload.parcels[0].weight = {
-        amount: (packageDetails.weight || 1.0).toString(),
-        unit: "kg"
+        target_point: sanitizedId
       };
       
-      // Add address for courier
+      // Log the Paczkomat ID we're using
+      console.log(`Using Paczkomat ID: ${sanitizedId} (original: ${recipient.paczkomatId})`);
+    } else {
+      // For courier delivery, add address
       payload.receiver.address = {
         street: recipient.address?.street || 'Nieznana',
         building_number: recipient.address?.buildingNumber || '1',
@@ -109,6 +227,14 @@ class InPostService {
         post_code: recipient.address?.postCode || '00-001',
         country_code: 'PL'
       };
+      
+      // For courier, add weight to parcels
+      if (packageDetails.weight) {
+        payload.parcels.weight = {
+          amount: (packageDetails.weight || 1.0).toString(),
+          unit: "kg"
+        };
+      }
     }
     
     // Log the final payload
@@ -135,10 +261,35 @@ class InPostService {
         timestamp: new Date().toISOString()
       });
       
+      // If it's a Paczkomat delivery, verify the Paczkomat ID first
+      if (orderData.recipient?.paczkomatId) {
+        const sanitizedId = this.sanitizePaczkomatId(orderData.recipient.paczkomatId);
+        
+        // Check if the ID is valid
+        try {
+          const isValid = await this.isValidPaczkomatId(sanitizedId);
+          if (!isValid) {
+            console.warn(`⚠️ Warning: Paczkomat ID '${sanitizedId}' may be invalid. Proceeding anyway.`);
+            
+            // If the ID is possibly invalid, try to suggest some valid IDs
+            if (orderData.recipient.address && orderData.recipient.address.postCode) {
+              console.log(`Trying to find valid Paczkomat points near ${orderData.recipient.address.postCode}`);
+              await this.findPaczkomatsByPostalCode(orderData.recipient.address.postCode);
+            } else {
+              // Use a default postal code to search for examples
+              await this.findPaczkomatsByPostalCode('00-001');
+            }
+          }
+        } catch (validationError) {
+          console.error('Error validating Paczkomat ID:', validationError.message);
+          // Continue with the request despite validation failure
+        }
+      }
+      
       const payload = this.createShipmentPayload(orderData);
       
       // Log the request payload
-      console.log('�� INPOST API REQUEST:', {
+      console.log(' INPOST API REQUEST:', {
         url: `${this.apiUrl}/organizations/${this.organizationId}/shipments`,
         method: 'POST',
         orderNumber: orderData.orderNumber,
@@ -247,6 +398,9 @@ class InPostService {
     try {
       const { recipient, orderNumber } = orderData;
       
+      // Sanitize the Paczkomat ID
+      const sanitizedId = this.sanitizePaczkomatId(recipient.paczkomatId);
+      
       // Create a minimal payload based exactly on the successful example
       const minimalPayload = {
         receiver: {
@@ -255,12 +409,12 @@ class InPostService {
           email: recipient.email || 'klient@familybalance.pl',
           phone: (recipient.phone || '500000000').toString().replace(/\s+/g, '')
         },
-        parcels: [{
+        parcels: {
           template: "small"
-        }],
+        },
         custom_attributes: {
           sending_method: "dispatch_order",
-          target_point: recipient.paczkomatId
+          target_point: sanitizedId
         },
         service: "inpost_locker_standard",
         reference: orderNumber || 'FB-ORDER'
