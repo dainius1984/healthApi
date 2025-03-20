@@ -51,9 +51,16 @@ const corsConfig = {
       'https://secure.snd.payu.com',
       'https://www.payu.pl', 
       'https://sandbox.payu.com',
-      // Add development origins if needed
+      'https://secure.payu.com',
+      // Add development origins
       'http://localhost:3000',
-      'http://localhost:5173'
+      'http://localhost:5173',
+      // Allow Render preview URLs
+      /^https:\/\/[a-zA-Z0-9-]+\.onrender\.com$/,
+      // Allow Vercel preview URLs
+      /^https:\/\/[a-zA-Z0-9-]+\.vercel\.app$/,
+      // Allow netlify preview URLs 
+      /^https:\/\/[a-zA-Z0-9-]+\.netlify\.app$/
     ],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     credentials: true,
@@ -63,10 +70,15 @@ const corsConfig = {
       'Accept', 
       'OpenPayU-Signature',
       'Origin',
+      'X-Requested-With',
+      'X-CSRF-Token',
+      'X-Inertia',
+      'X-Inertia-Version',
       'X-Requested-With'
     ],
     exposedHeaders: ['OpenPayU-Signature'],
-    optionsSuccessStatus: 200
+    optionsSuccessStatus: 200,
+    maxAge: 86400 // 24 hours in seconds
   };
 
 // Session configuration

@@ -16,11 +16,28 @@ const PORT = process.env.PORT || 10000;
 // Session configuration
 app.use(session(config.sessionConfig));
 
-// Pre-flight
+// CORS handling - proper order is important
+// 1. First, handle pre-flight requests for all routes
 app.options('*', cors(config.corsConfig));
 
-// CORS configuration
+// 2. Apply CORS for all routes
 app.use(cors(config.corsConfig));
+
+// 3. Add additional CORS middleware for specific routes that might need it
+const additionalCorsMiddleware = (req, res, next) => {
+  // Ensure CORS headers are set properly
+  res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
+  res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Content-Length, X-Requested-With, Accept');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  
+  // Handle preflight
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+  
+  next();
+};
 
 app.use(express.json());
 
@@ -42,8 +59,8 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Create payment route
-app.post('/api/create-payment', async (req, res) => {
+// Create payment route - apply additional CORS middleware
+app.post('/api/create-payment', additionalCorsMiddleware, async (req, res) => {
   try {
     console.log('Payment request received:', req.body);
 
@@ -72,7 +89,7 @@ app.post('/api/create-payment', async (req, res) => {
   }
 });
 
-// PayU webhook handler - now using the dedicated component
+// PayU webhook handler
 app.post('/api/payu-webhook', async (req, res) => {
   try {
     await PayUWebhookHandler.handleNotification(req);
@@ -87,8 +104,8 @@ app.post('/api/payu-webhook', async (req, res) => {
   }
 });
 
-// Register shipping routes
-app.use('/api/shipping', shippingRoutes);
+// Register shipping routes with additional CORS middleware
+app.use('/api/shipping', additionalCorsMiddleware, shippingRoutes);
 
 app.use(errorHandler);
 
@@ -96,40 +113,7 @@ app.use(errorHandler);
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`);
   console.log('Environment check:', config.getEnvironmentStatus());
-
-  // Log all registered routes to check if InPost endpoints are properly registered
-  console.log('🔍 CHECKING REGISTERED ROUTES:');
-  app._router.stack.forEach((middleware) => {
-    if (middleware.route) {
-      // Routes registered directly on the app
-      const path = middleware.route.path;
-      const methods = Object.keys(middleware.route.methods)
-        .filter(method => middleware.route.methods[method])
-        .map(method => method.toUpperCase())
-        .join(', ');
-      
-      console.log(`📌 ${methods} ${path}`);
-    } else if (middleware.name === 'router') {
-      // Routes registered via router
-      middleware.handle.stack.forEach((handler) => {
-        if (handler.route) {
-          const path = handler.route.path;
-          const methods = Object.keys(handler.route.methods)
-            .filter(method => handler.route.methods[method])
-            .map(method => method.toUpperCase())
-            .join(', ');
-          
-          // Check if this is a shipping route
-          if (path.includes('shipping') || path.includes('inpost')) {
-            console.log(`📦 SHIPPING ROUTE: ${methods} ${path}`);
-          } else {
-            console.log(`📌 ${methods} ${path}`);
-          }
-        }
-      });
-    }
-  });
-
+  
   // Log InPost API token status
   console.log('🔑 INPOST API TOKEN STATUS:', {
     isConfigured: !!process.env.INPOST_API_TOKEN,
