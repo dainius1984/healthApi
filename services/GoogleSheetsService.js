@@ -81,8 +81,12 @@ class GoogleSheetsService {
       if (orderRow) {
         const statusMapping = {
           'PAID': 'Opłacone',
+          'COMPLETED': 'Opłacone',
+          'SUCCESS': 'Opłacone',
           'CANCELLED': 'Anulowane',
+          'CANCELED': 'Anulowane',
           'PENDING': 'Oczekujące',
+          'WAITING_FOR_CONFIRMATION': 'Oczekujące',
           'REJECTED': 'Odrzucone',
         };
   

@@ -38,6 +38,7 @@ class PayUWebhookHandler {
       // Map PayU status to our system status
       const statusMapping = {
         COMPLETED: 'PAID',
+        SUCCESS: 'PAID',
         CANCELED: 'CANCELLED',
         PENDING: 'PENDING',
         WAITING_FOR_CONFIRMATION: 'PENDING',
