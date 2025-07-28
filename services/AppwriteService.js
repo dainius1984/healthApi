@@ -76,7 +76,11 @@ class AppwriteService {
         'CANCELLED': 'Anulowane',
         'PENDING': 'Oczekujące',
         'WAITING': 'Oczekujące',
-        'REJECTED': 'Odrzucone' 
+        'REJECTED': 'Odrzucone',
+        'ZA_POBRANIEM': 'Za pobraniem',
+        'ZAPOBRANIEM': 'Za pobraniem',
+        'zaPobraniem': 'Za pobraniem',
+        'za_pobraniem': 'Za pobraniem'
       };
 
       const mappedStatus = statusMapping[status.toUpperCase()] || status;

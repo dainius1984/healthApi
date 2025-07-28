@@ -42,7 +42,9 @@ class PayUWebhookHandler {
         CANCELED: 'CANCELLED',
         PENDING: 'PENDING',
         WAITING_FOR_CONFIRMATION: 'PENDING',
-        REJECTED: 'REJECTED'
+        REJECTED: 'REJECTED',
+        ZA_POBRANIEM: 'ZA_POBRANIEM',
+        ZAPOBRANIEM: 'ZA_POBRANIEM'
       };
 
       const mappedStatus = statusMapping[order.status] || order.status;

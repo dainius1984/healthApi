@@ -88,6 +88,10 @@ class GoogleSheetsService {
           'PENDING': 'Oczekujące',
           'WAITING_FOR_CONFIRMATION': 'Oczekujące',
           'REJECTED': 'Odrzucone',
+          'ZA_POBRANIEM': 'Za pobraniem',
+          'ZAPOBRANIEM': 'Za pobraniem',
+          'zaPobraniem': 'Za pobraniem',
+          'za_pobraniem': 'Za pobraniem'
         };
   
         const mappedStatus = statusMapping[status] || status;
